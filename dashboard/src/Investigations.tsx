@@ -47,7 +47,7 @@ export function NodeDecisions({ price, briefing }: { price: number; briefing: Re
   const labels: Record<string, string> = { hardware: 'Machine-specific signal', user_code: 'Shared workload signal', cannot_determine: 'Cause unresolved' }
   return <>
     {status}
-    <div className="plan-summary"><ShieldCheck size={24} /><div><strong>Finding counts are a reason to investigate.</strong><p>The proposed API recommends draining five machines for {usd(data.baseline.recommendation.estimated_savings.amount)}. Its ranking misses the node with the explicit hardware episode.</p></div><span className="pill neutral">Layer B audited</span></div>
+    <div className="plan-summary"><ShieldCheck size={24} /><div><strong>Review the proposed machine removals before approving them.</strong><p>The proposed API recommends draining five machines for {usd(data.baseline.recommendation.estimated_savings.amount)}. Its ranking misses the node with the explicit hardware episode.</p></div><span className="pill neutral">Layer B audited</span></div>
     <div className="research-case-tabs" role="tablist" aria-label="Node investigations">{data.cases.map((x: any, i: number) => <button key={x.id} role="tab" aria-selected={selected === i} className={'card case-tab ' + (selected === i ? 'selected' : '')} onClick={() => setSelected(i)}>
       <span className="eyebrow">CASE {i + 1} / {x.cause === 'hardware' ? 'Inspect' : x.cause === 'user_code' ? 'Workload review' : 'Monitor'}</span><strong>{labels[x.cause]}</strong><span>{x.node}</span><small>{date(x.start)} – {date(x.end)} · window {x.window}</small>
     </button>)}</div>
@@ -62,7 +62,7 @@ export function NodeDecisions({ price, briefing }: { price: number; briefing: Re
       <details className="json-details"><summary>Inspect this window’s jobs, joins, and finding</summary><p>{data.method}</p><div className="research-job-links">{c.examples.map((x: any) => <button className="job-link" key={x.id} onClick={() => setRaw(x.id)}>{x.id} · {x.state}</button>)}</div><pre>{JSON.stringify({ finding_id: c.id, start: c.start, end: c.end, counts_match_detector: c.detector_counts_match, controls: c.controls }, null, 2)}</pre></details>
     </section>
     <DrainLab price={price} node={h.node} />
-    <section className="card research-card"><div className="section-top"><div><span className="eyebrow">CHECK THE RECOMMENDATION</span><h2>A ranking is not a recovery estimate.</h2></div><Cpu size={22} /></div><p className="research-body">{data.baseline.audit}</p>
+    <section className="card research-card"><div className="section-top"><div><span className="eyebrow">CHECK THE RECOMMENDATION</span><h2>Why the automatic recommendation needs review</h2></div><Cpu size={22} /></div><p className="research-body">{data.baseline.audit}</p>
       <div className="research-node-list">{data.baseline.nodes.map((x: any) => <span key={x.entity_id}><Cpu size={14} />{x.entity_id}<b>{x.finding_count} findings</b></span>)}</div>
       <details className="json-details"><summary>Inspect proposed recommendation and official causal response</summary><pre>{JSON.stringify({ baseline: data.baseline, hardware_causal: data.causal }, null, 2)}</pre></details>
       {briefing}
@@ -78,20 +78,20 @@ function DrainLab({ price, node }: { price: number; node: string }) {
   const [operator, setOperator] = useState(1)
   const [nodes, setNodes] = useState(1)
   const { data, status, pending } = useEvidence(`/drain-scenario?price=${price}&duration=${duration}&recurrence=${fraction / 100}&operator_hours=${operator}&nodes=${nodes}`)
-  return <section className="card research-card"><div className="section-top"><div><span className="eyebrow">THE DRAIN-COST TRADE-OFF</span><h2>What does taking capacity away cost?</h2></div><FlaskConical size={23} /></div>
+  return <section className="card research-card"><div className="section-top"><div><span className="eyebrow">COST OF TAKING MACHINES OUT OF SERVICE</span><h2>What does taking capacity away cost?</h2></div><FlaskConical size={23} /></div>
     <p className="research-body">Reference episode: {node}, February 27–March 7. Assume one repeat; price avoidable GPU time against unavailable capacity and inspection effort. Research disruption and queue delays still need an owner’s assessment. The five-machine option compares costs; it does not reproduce the proposed API’s selection.</p>
     <div className="drain-grid"><div className="drain-controls">
-      <RangeControl label="Drain duration per machine" value={duration} suffix=" hours" max={48} step={.5} change={setDuration} />
-      <RangeControl label="Fraction of repeat losses avoided" value={fraction} suffix="%" max={100} step={5} change={setFraction} />
-      <RangeControl label="Total operator time · $95/hour" value={operator} suffix=" hours" max={8} step={.25} change={setOperator} />
+      <RangeControl label="Time out of service per machine" value={duration} suffix=" hours" max={48} step={.5} change={setDuration} />
+      <RangeControl label="Share of repeated GPU losses prevented" value={fraction} suffix="%" max={100} step={5} change={setFraction} />
+      <RangeControl label="Total staff time · $95/hour" value={operator} suffix=" hours" max={8} step={.25} change={setOperator} />
       <fieldset className="node-switch"><legend>Machines made unavailable</legend>{[1, 5].map(n => <button className={'button ' + (nodes === n ? 'primary' : 'secondary')} key={n} aria-pressed={nodes === n} onClick={() => setNodes(n)}>{n === 1 ? 'One targeted machine' : 'Five machines'}</button>)}</fieldset>
     </div><div className="drain-result" aria-busy={pending}>{status}{pending && data && <span className="small-muted">Updating scenario…</span>}{data && <>
-      <span className="eyebrow">NET MODELED CAPACITY VALUE</span><strong className={data.net_value_usd < 0 ? 'negative' : ''}>{usd(data.net_value_usd)}</strong>
-      <div className="calc-line"><span>Observed matching-signature GPU time</span><b>{data.observed_signature_gpu_hours.toFixed(3)} GPU-h</b></div>
-      <div className="calc-line"><span>Avoided repeat loss</span><b>{usd(data.avoided_value_usd)}</b></div>
+      <span className="eyebrow">GPU TIME BENEFIT MINUS INSPECTION COSTS</span><strong className={data.net_value_usd < 0 ? 'negative' : ''}>{usd(data.net_value_usd)}</strong>
+      <div className="calc-line"><span>GPU time used by the matching failures</span><b>{data.observed_signature_gpu_hours.toFixed(3)} GPU-h</b></div>
+      <div className="calc-line"><span>GPU time loss prevented</span><b>{usd(data.avoided_value_usd)}</b></div>
       <div className="calc-line"><span>Unavailable capacity · {data.unavailable_gpu_hours} GPU-h</span><b>−{usd(data.capacity_cost_usd)}</b></div>
-      <div className="calc-line"><span>Operator cost</span><b>−{usd(data.operator_cost_usd)}</b></div>
-      <p>{data.cannot_break_even_even_at_zero_drain ? 'Operator cost alone exceeds the modeled GPU-time benefit. Inspection may still be justified by research reliability; that value is not measured here.' : `Break-even drain duration: ${data.break_even_drain_hours.toFixed(4)} hours per machine under these assumptions.`}</p>
+      <div className="calc-line"><span>Staff cost</span><b>−{usd(data.operator_cost_usd)}</b></div>
+      <p>{data.cannot_break_even_even_at_zero_drain ? 'Staff cost alone exceeds the modeled GPU-time benefit. Inspection may still be justified by research reliability; that value is not measured here.' : `Break-even drain duration: ${data.break_even_drain_hours.toFixed(4)} hours per machine under these assumptions.`}</p>
     </>}</div></div>
     {data && <p className="small-muted research-note">{data.caveat}</p>}
   </section>
@@ -110,13 +110,13 @@ export function GPUCards({ price }: { price: number }) {
   const example = data.examples[Math.min(selected, data.examples.length - 1)]
   return <>
     {status}
-    <div className="plan-summary"><Cpu size={24} /><div><strong>A job average can hide an unused card.</strong><p>Investigate device placement before buying capacity. Completed, single-attempt jobs only; each card’s hours are capped to job walltime.</p></div><span className="pill neutral">Not in recovery total</span></div>
+    <div className="plan-summary"><Cpu size={24} /><div><strong>Some jobs may be able to use fewer GPUs.</strong><p>Test the GPU allocation with workload owners. These estimates use completed jobs without retries and cap GPU hours to the job’s duration.</p></div><span className="pill neutral">Not in recovery total</span></div>
     <div className="card-thresholds">{data.thresholds.map((s: any) => <section className={'card threshold-card ' + (s.id === 'peak_zero' ? 'selected' : '')} key={s.id}>
-      <span className="eyebrow">{s.id === 'small_memory' ? 'STRICTER EVIDENCE' : s.id === 'peak_zero' ? 'CLAIMED EXPOSURE' : 'BROADER SCREEN'}</span><strong>{whole(s.gpu_hours)}<small> GPU-h</small></strong><b>{usd(s.value_usd)} capacity value</b><p>{s.label}</p><span>{s.cards} card allocations · {s.jobs} jobs</span>
+      <span className="eyebrow">{s.id === 'small_memory' ? 'STRICTER EVIDENCE' : s.id === 'peak_zero' ? 'GPU TIME TO INVESTIGATE' : 'BROADER SCREEN'}</span><strong>{whole(s.gpu_hours)}<small> GPU-h</small></strong><b>{usd(s.value_usd)} capacity value</b><p>{s.label}</p><span>{s.cards} card allocations · {s.jobs} jobs</span>
     </section>)}</div>
-    <p className="small-muted research-note">Threshold sensitivity, not recovery scenarios: {data.limitation}</p>
-    <section className="card research-card"><div className="section-top"><div><span className="eyebrow">FOLLOW THE CARDS</span><h2>Which GPU did the work?</h2></div><span className="pill green">Measured per card</span></div>
-      <div className="gpu-explorer"><div className="gpu-job-list"><span className="eyebrow">Largest quiet-card exposure first</span>{data.examples.map((j: any, i: number) => <button key={j.id} aria-pressed={selected === i} className={selected === i ? 'selected' : ''} onClick={() => setSelected(i)}><span>Job {j.id}</span><strong>{whole(j.quiet_gpu_hours)} GPU-h<ArrowUpRight size={13} /></strong></button>)}
+    <p className="small-muted research-note">These totals change with the selection rules; they are not estimates of time we can recover. {data.limitation}</p>
+    <section className="card research-card"><div className="section-top"><div><span className="eyebrow">INDIVIDUAL GPU USE</span><h2>Which GPU did the work?</h2></div><span className="pill green">Measured per card</span></div>
+      <div className="gpu-explorer"><div className="gpu-job-list"><span className="eyebrow">Most time on quiet GPUs first</span>{data.examples.map((j: any, i: number) => <button key={j.id} aria-pressed={selected === i} className={selected === i ? 'selected' : ''} onClick={() => setSelected(i)}><span>Job {j.id}</span><strong>{whole(j.quiet_gpu_hours)} GPU-h<ArrowUpRight size={13} /></strong></button>)}
         <div className="pagination"><span>{offset + 1}–{Math.min(offset + data.limit, data.total)} / {data.total}</span><div><button className="icon-button" aria-label="Previous card jobs" disabled={!offset} onClick={() => { setOffset(x => x - 20); setSelected(0) }}><ChevronLeft size={16} /></button><button className="icon-button" aria-label="Next card jobs" disabled={offset + data.limit >= data.total} onClick={() => { setOffset(x => x + 20); setSelected(0) }}><ChevronRight size={16} /></button></div></div>
       </div><div className="gpu-detail">
         <div className="section-top"><div><span className="eyebrow">JOB {example.id} · COMPLETED</span><h3>{example.job_avg_sm}% average compute hides the split.</h3></div><button className="text-button" onClick={() => setRaw(example.id)}>Raw records<ArrowUpRight size={15} /></button></div>
@@ -131,7 +131,7 @@ export function GPUCards({ price }: { price: number }) {
       </div></div>
     </section>
     <div className="research-two-col"><section className="card research-card"><span className="eyebrow">MEMORY STILL MATTERS</span><h2>{data.memory_above_one_percent_cards} quiet-card allocations exceeded 1% peak memory.</h2><p className="research-body">The strict screen falls to {whole(data.thresholds[0].gpu_hours)} GPU-hours. Even that subset has nonzero PCIe counters. Those counters are coarse and can be censored; they do not establish sustained useful transfers. Verify output parity and runtime before reducing the allocation.</p></section>
-      <section className="card research-card"><span className="eyebrow">PLACEMENT ASSOCIATION</span><h2>Card index is a clue, not a diagnosis.</h2><p className="research-body">Local GPU 0: {data.quiet_card_index['0']} quiet rows. Local GPU 1: {data.quiet_card_index['1']} quiet rows. {data.index_caveat}</p></section></div>
+      <section className="card research-card"><span className="eyebrow">PLACEMENT ASSOCIATION</span><h2>Check how jobs assign work to GPUs</h2><p className="research-body">Local GPU 0: {data.quiet_card_index['0']} quiet rows. Local GPU 1: {data.quiet_card_index['1']} quiet rows. {data.index_caveat}</p></section></div>
     <details className="json-details"><summary>Inspect threshold and deduplication method</summary><p>{data.method}</p><p><Check size={13} /> {data.existing_plan_overlap_jobs} jobs overlap with the existing two recovery cohorts. Card exposure remains separate regardless.</p></details>
     {raw && <RawJob id={raw} close={() => setRaw(null)} />}
   </>

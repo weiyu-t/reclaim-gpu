@@ -51,11 +51,11 @@ Answers must match a four-field JSON structure and cite a retrieved finding ID. 
 
 ## Explore
 
-- **Overview:** allocation value by outcome, weekly allocation, investigated opportunity and target gap.
-- **Recovery plan:** two ranked actions, owner roles, evidence, pilots, and rollback conditions.
-- **Risk lab:** vary recovery, useful work disrupted, operator effort, and how much freed capacity reduces a bill.
-- **Node decisions:** compare hardware, workload and unresolved cases; audit the proposed drain recommendation and price a targeted versus five-machine drain.
-- **GPU cards:** inspect paired compute/memory measurements and 2,475–4,685 quiet-card hours under explicit evidence thresholds; kept outside recovery totals.
+- **Overview:** a 30-second decision brief with the proposed trials, potential GPU-time value, rework cost and assumed bill reduction; detailed usage and the target gap follow below.
+- **Proposed trials:** two ranked actions, owner roles, evidence, pilots, and rollback conditions.
+- **Downside costs:** vary recovery, useful work disrupted, operator effort, and how much freed capacity reduces a bill.
+- **Machine review:** compare hardware, workload and unresolved cases; audit the proposed drain recommendation and price a targeted versus five-machine drain.
+- **GPU usage:** inspect paired compute/memory measurements and 2,475–4,685 quiet-card hours under explicit evidence thresholds; kept outside recovery totals.
 - **Evidence:** drill into jobs, per-GPU records and findings; inspect a shared-array failure across 34 machines.
 - **Method:** cohort definitions, overlap handling, sample limits and scenario assumptions.
 
@@ -85,7 +85,7 @@ The official validator accepts the claims schema. Its confidence warning checks 
 | `reclaim/routes.py` | Dashboard API, preserving official routes |
 | `api/`, `mcp_layer/` | Official MantisGrid starter services |
 | `tests/` | Accounting, joins, API and provider-failure checks |
-| `REPORT.md`, `DEMO.md` | Analysis report and four-minute walkthrough |
+| `REPORT.md`, `DEMO.md`, `DEMO_GUIDE.md` | Analysis report, 30-second decision brief, four-minute walkthrough, and plain-language presenter notes |
 | `docs/BRIEF.md`, `docs/` | Original task brief and official guides |
 
 ## AI and attribution disclosure

@@ -44,7 +44,7 @@ The second cohort includes **58 cancelled jobs**, selected for activity and dura
 
 ## Cost of being wrong
 
-The Risk lab uses the two disjoint cohorts and these visible assumptions:
+The Downside costs uses the two disjoint cohorts and these visible assumptions:
 
 ```
 recovered hours = base scenario hours × recovery achieved

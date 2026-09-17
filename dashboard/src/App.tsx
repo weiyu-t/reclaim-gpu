@@ -80,10 +80,10 @@ function App() {
   useEffect(() => { get<{ configured: boolean }>('/agent/status').then(s => setAgent(s.configured)).catch(() => {}) }, [revision, selected])
   const nav = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'plan', label: 'Recovery plan', icon: Layers3 },
-    { id: 'risk', label: 'Risk lab', icon: SlidersHorizontal },
-    { id: 'nodes', label: 'Node decisions', icon: ShieldCheck },
-    { id: 'cards', label: 'GPU cards', icon: Cpu },
+    { id: 'plan', label: 'Proposed trials', icon: Layers3 },
+    { id: 'risk', label: 'Downside costs', icon: SlidersHorizontal },
+    { id: 'nodes', label: 'Machine review', icon: ShieldCheck },
+    { id: 'cards', label: 'GPU usage', icon: Cpu },
     { id: 'evidence', label: 'Evidence', icon: Network },
   ] as const
   function navigate(next: Tab) { setTab(next); window.scrollTo({ top: 0, behavior: 'smooth' }) }
@@ -118,46 +118,39 @@ function App() {
         </div>
       </header>
       <main>
-        {!data ? <div className="loading-state"><span className="logo"><ArrowUpRight /></span><h1>{error ? 'Your workspace is getting ready.' : 'Following the evidence…'}</h1>
+        {!data ? <div className="loading-state"><span className="logo"><ArrowUpRight /></span><h1>{error ? 'The data service is unavailable.' : 'Loading the budget review…'}</h1>
           <p>{error || 'Loading the local workload sample and checking the accounting.'}</p>
           {error ? <button className="button primary" onClick={() => setRevision(r => r + 1)}>Try again</button> : <LoaderCircle className="spin" />}
         </div> : <>
           {error && <div className="inline-error">{error} <button onClick={() => setRevision(r => r + 1)}>Retry</button></div>}
           <div className="page-heading">
             <div><div className="eyebrow">GPU BUDGET INTELLIGENCE</div>
-              <h1>{tab === 'overview' ? <>Spend less. <em>Protect the work.</em></> : tab === 'plan' ? <>Two moves. <em>Evidence first.</em></> : tab === 'risk' ? <>What if <em>we’re wrong?</em></> : tab === 'nodes' ? <>Before you drain. <em>Check the cause.</em></> : tab === 'cards' ? <>One allocation. <em>Uneven work.</em></> : tab === 'evidence' ? <>Follow the signal. <em>Find the cause.</em></> : <>Every number <em>has a source.</em></>}</h1>
-              <p>{tab === 'overview' ? 'A focused recovery plan, with the trade-offs out in the open.' : tab === 'plan' ? 'Pilot the changes we can defend. Measure before expanding.' : tab === 'risk' ? 'Stress-test the decision before changing anyone’s workload.' : tab === 'nodes' ? 'Three investigated windows. Different evidence, different decisions.' : tab === 'cards' ? 'Look inside job averages before changing GPU allocations.' : tab === 'evidence' ? 'Many findings can describe one problem. Investigate before acting.' : 'Reproducible accounting, explicit assumptions, and honest limits.'}</p>
+              <h1>{tab === 'overview' ? 'GPU budget decision' : tab === 'plan' ? 'Proposed trials' : tab === 'risk' ? 'Cost of an incorrect recommendation' : tab === 'nodes' ? 'Which machines need inspection?' : tab === 'cards' ? 'Where fewer GPUs may be enough' : tab === 'evidence' ? 'Evidence behind the recommendations' : 'Sources and assumptions'}</h1>
+              <p>{tab === 'overview' ? 'Potential benefit, downside, and spending impact.' : tab === 'plan' ? 'Two changes to test with workload owners before a wider rollout.' : tab === 'risk' ? 'Estimate the cost of interrupted work before approving a change.' : tab === 'nodes' ? 'Compare machine faults with problems in the work running on them.' : tab === 'cards' ? 'Check each GPU before reducing the number assigned to a job.' : tab === 'evidence' ? 'Review the source records and the reasons for each proposed action.' : 'How the estimates are calculated and what still needs testing.'}</p>
             </div>
             <div className="date-chip"><Clock3 size={14} /><span>{data.window.start} — {data.window.end}<small>Historical sample</small></span></div>
           </div>
           {tab === 'overview' && <>
-            <div className="hero-grid">
-              <section className="hero-card">
-                <div className="card-eyebrow"><span className="live-dot" />A MEASURED FIRST STEP<span className="hero-badge">2 investigated actions</span></div>
-                <div className="hero-value">{compact(data.recovery.value.point)}<span>potential capacity value</span></div>
-                <div className="hero-range">{compact(data.recovery.value.low)}–{compact(data.recovery.value.high)} <span>across conservative to optimistic scenarios</span></div>
-                <div className="hero-bottom"><div><strong>{whole(data.recovery.point)} GPU-h</strong><span>{pct(data.recovery.share_percent)} of observed allocation</span></div>
-                  <button className="button mint" onClick={() => navigate('plan')}>Explore the recovery plan<ArrowUpRight size={17} /></button></div>
-                <div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
-              </section>
-              <section className="card target-card">
-                <div className="section-top"><span className="eyebrow">THE 20% CUT</span><Target size={19} /></div>
-                <div className="target-value">{compact(data.target.value_usd)}<span>sample-equivalent target</span></div>
-                <div className="target-progress"><span style={{ width: Math.min(data.recovery.target_coverage_percent, 100) + '%' }} /></div>
-                <div className="target-key"><span><i />Investigated plan</span><strong>{pct(data.recovery.target_coverage_percent)} of target</strong></div>
-                <div className="target-gap"><ShieldCheck size={17} /><p><strong>{compact(data.recovery.target_gap_usd)} still needs evidence.</strong> We won’t turn a target into a savings claim.</p></div>
-              </section>
-            </div>
-            <Spend data={data} />
-            <div className="section-heading"><div><span className="eyebrow">WHERE TO ACT</span><h2>Start here. Learn, then expand.</h2></div><button className="text-button" onClick={() => navigate('plan')}>View recovery plan<ArrowRight size={15} /></button></div>
+            <section className="executive-brief" aria-label="Budget decision brief">
+              <div className="executive-recommendation"><div><span className="eyebrow">RECOMMENDATION</span><h2>Approve two limited trials.</h2><p>Test CPU placement and warnings for low-activity GPU sessions. Defer a broad capacity cut.</p></div><span className="executive-status">Proposed · not yet tested</span></div>
+              <div className="executive-metrics">
+                <div><span>Potential value of GPU time freed</span><strong>{compact(data.recovery.value.point)}</strong><small>{compact(data.recovery.value.low)}–{compact(data.recovery.value.high)} scenario range for eligible jobs</small></div>
+                <div><span>Cost if 2% of selected jobs are disrupted</span><strong>{compact(data.default_risk.downside_usd)}</strong><small>Repeated GPU work + staff time</small></div>
+                <div><span>Net value after that rework</span><strong>{compact(data.default_risk.net_capacity_value_usd)}</strong><small>GPU time value less estimated rework</small></div>
+              </div>
+              <div className="executive-cash"><strong>{usd(data.default_risk.gross_bill_reduction_usd)}</strong><div><b>Bill reduction assumed</b><p>Freed GPU time reduces spending only if billing or purchasing changes.</p></div></div>
+              <div className="executive-footer"><p>Historical sample at ${data.price.usd_per_gpu_hour.toFixed(2)}/GPU-hour. Trial results are unproven; actual recovery could be zero.</p><button className="button mint" onClick={() => navigate('risk')}>Review downside<ArrowUpRight size={16} /></button></div>
+            </section>
+            <div className="section-heading"><div><span className="eyebrow">PROPOSED ACTIONS</span><h2>What to test first</h2></div><button className="text-button" onClick={() => navigate('plan')}>Trial details<ArrowRight size={15} /></button></div>
             <div className="actions-grid">{data.actions.map((a, i) => <ActionCard key={a.id} action={a} index={i} onOpen={() => setSelected(a.id)} />)}</div>
-            <section className="card overview-downside"><div className="section-top"><div><span className="eyebrow">COST OF BEING WRONG</span><h2>Price the downside before the pilot.</h2></div><button className="text-button" onClick={() => navigate('risk')}>Stress-test<ArrowUpRight size={17} /></button></div><div className="research-metrics"><div><strong>{usd(data.default_risk.downside_usd)}</strong><span>modeled rework cost</span></div><div><strong>{usd(data.default_risk.net_capacity_value_usd)}</strong><span>capacity value after rework</span></div><div><strong>{usd(data.default_risk.gross_bill_reduction_usd)}</strong><span>bill reduction assumed</span></div></div><p className="small-muted">Assumes 2% of selected jobs disrupted, a full rerun, and 0.5 operator hours each at $95/hour. These assumptions need a pilot.</p></section>
+            <section className="card target-review"><div className="section-top"><div><span className="eyebrow">PROGRESS TOWARD A 20% REDUCTION</span><h2>The current plan could cover {pct(data.recovery.target_coverage_percent)} of the target.</h2></div><Target size={20} /></div><p>The target equals {compact(data.target.value_usd)} of GPU time in this sample. Applied to eligible jobs, the proposed changes could free {whole(data.recovery.point)} GPU-hours ({pct(data.recovery.share_percent)} of recorded allocation), leaving {compact(data.recovery.target_gap_usd)} without an identified recovery plan.</p><div className="target-progress"><span style={{ width: Math.min(data.recovery.target_coverage_percent, 100) + '%' }} /></div><p className="small-muted">Rework estimate: 2% of selected jobs repeat their full GPU duration and need 0.5 staff hours each at $95/hour. Trial results must replace these assumptions before rollout.</p></section>
+            <Spend data={data} />
           </>}
           {tab === 'plan' && <>
-            <div className="plan-summary"><ShieldCheck size={23} /><div><strong>Recommend a pilot, not an immediate fleet cut.</strong><p>The base scenario frees {whole(data.recovery.point)} GPU-hours. It does not establish a {data.target.percent}% cash saving.</p></div><span className="pill green">{pct(data.recovery.share_percent)} of sample</span></div>
+            <div className="plan-summary"><ShieldCheck size={23} /><div><strong>Approve a small trial with each workload owner.</strong><p>The starting estimate is {whole(data.recovery.point)} GPU-hours freed. Confirm the results and runtime before changing normal operations.</p></div><span className="pill green">{pct(data.recovery.share_percent)} of sample</span></div>
             <div className="actions-grid">{data.actions.map((a, i) => <ActionCard key={a.id} action={a} index={i} onOpen={() => setSelected(a.id)} expanded />)}</div>
-            <section className="card dedup-note"><CheckCheck size={23} /><div><h3>One job. One recovery claim.</h3><p>{data.accounting.overlap_removed_jobs} overlapping jobs belong to CPU placement only. {data.accounting.excluded_ambiguous_jobs} jobs with ambiguous duration or retry history are excluded from the action cohorts.</p></div><button className="text-button" onClick={() => navigate('method')}>Inspect the method<ArrowRight size={15} /></button></section>
-            <button className="risk-banner" onClick={() => navigate('risk')}><FlaskConical size={26} /><div><strong>Now challenge the plan.</strong><span>How much rework would erase the benefit?</span></div><ArrowUpRight size={22} /></button>
+            <section className="card dedup-note"><CheckCheck size={23} /><div><h3>Overlapping jobs are counted once.</h3><p>{data.accounting.overlap_removed_jobs} jobs qualify for both trials and are counted under CPU placement only. {data.accounting.excluded_ambiguous_jobs} jobs with unclear duration or retry history are excluded.</p></div><button className="text-button" onClick={() => navigate('method')}>Calculation method<ArrowRight size={15} /></button></section>
+            <button className="risk-banner" onClick={() => navigate('risk')}><FlaskConical size={26} /><div><strong>Review the cost of interrupted work.</strong><span>See when rework costs exceed the benefit.</span></div><ArrowUpRight size={22} /></button>
           </>}
           {tab === 'risk' && <RiskLab data={data} price={price} />}
           {tab === 'nodes' && <NodeDecisions price={price} briefing={<NodeBriefing key={price} price={price} />} />}
@@ -175,9 +168,9 @@ function App() {
 function Spend({ data }: { data: Overview }) {
   const max = Math.max(...data.weekly.map(w => w.gpu_hours))
   return <section className="card spend-card">
-    <div className="section-top"><div><span className="eyebrow">01 / WHERE THE MONEY WENT</span><h2>Allocation is only half the story.</h2></div><span className="pill neutral">Measured · {whole(data.sample.gpu_hours)} GPU-h</span></div>
+    <div className="section-top"><div><span className="eyebrow">RECORDED GPU USE</span><h2>GPU time by job outcome</h2></div><span className="pill neutral">Measured · {whole(data.sample.gpu_hours)} GPU-h</span></div>
     <div className="spend-layout">
-      <div className="spend-total"><span>Allocated capacity value</span><strong>{compact(data.spend_usd)}</strong><p>At {'$' + data.price.usd_per_gpu_hour.toFixed(2)} per GPU-hour.<br />Not an actual cloud invoice.</p></div>
+      <div className="spend-total"><span>Value of allocated GPU time</span><strong>{compact(data.spend_usd)}</strong><p>At {'$' + data.price.usd_per_gpu_hour.toFixed(2)} per GPU-hour.<br />Reference value for this sample.</p></div>
       <div className="spend-chart"><div className="stacked-bar" role="img" aria-label="GPU allocation by job outcome">
         {data.spend.map(s => <div key={s.state} style={{ width: (s.share * 100) + '%', background: colors[s.state] || '#babbb5' }} title={s.label + ': ' + usd(s.usd) + ', ' + whole(s.gpu_hours) + ' GPU-h'} />)}
       </div><div className="spend-legend">{data.spend.filter(s => s.share > .005).map(s => <div key={s.state}><span><i style={{ background: colors[s.state] || '#babbb5' }} />{s.label}</span><strong>{compact(s.usd)}</strong><small>{pct(s.share * 100)}</small></div>)}</div></div>
@@ -191,17 +184,17 @@ function Spend({ data }: { data: Overview }) {
         </g>
       })}</svg><div><span>Feb</span><span>Jun</span></div></div>
     </div>
-    <div className="subtle-note"><CircleHelp size={14} /><span>Cancelled isn’t automatically wasted. A stopped experiment can be the right decision.</span></div>
+    <div className="subtle-note"><CircleHelp size={14} /><span>Cancelled work may still be useful. These totals alone do not identify savings.</span></div>
   </section>
 }
 
 function ActionCard({ action: a, index, onOpen, expanded = false }: { action: Action; index: number; onOpen: () => void; expanded?: boolean }) {
   return <section className="card action-card">
-    <div className="action-top"><span className="action-icon">{index === 0 ? <Cpu size={21} /> : <Clock3 size={21} />}</span><span className="action-category">0{index + 1} / {a.tag}</span><span className={'pill ' + (index === 0 ? 'green' : 'amber')}>{index === 0 ? 'Placement pilot' : 'Warning-first pilot'}</span></div>
+    <div className="action-top"><span className="action-icon">{index === 0 ? <Cpu size={21} /> : <Clock3 size={21} />}</span><span className="action-category">0{index + 1} / {a.tag}</span><span className={'pill ' + (index === 0 ? 'green' : 'amber')}>{index === 0 ? 'CPU trial' : 'Warnings only first'}</span></div>
     <h3>{a.title}</h3><p className="action-description">{a.description}</p>
-    <div className="action-estimate"><strong>{compact(a.value.point)}</strong><span>capacity value<br /><b>{compact(a.value.low)}–{compact(a.value.high)} scenario range</b></span></div>
+    <div className="action-estimate"><strong>{compact(a.value.point)}</strong><span>potential GPU time value<br /><b>{compact(a.value.low)}–{compact(a.value.high)} scenario range</b></span></div>
     <div className="action-facts"><span><Database size={13} />{whole(a.job_count)} jobs</span><span>{whole(a.recovery.point)} GPU-h · base</span></div>
-    {expanded && <div className="action-expanded"><div><span>PILOT</span><p>{a.pilot}</p></div><div><span>STOP IF</span><p>{a.rollback}</p></div><div><span>ASSUMPTION</span><p>{a.savings_basis}</p></div></div>}
+    {expanded && <div className="action-expanded"><div><span>TRIAL</span><p>{a.pilot}</p></div><div><span>STOP IF</span><p>{a.rollback}</p></div><div><span>ASSUMPTION</span><p>{a.savings_basis}</p></div></div>}
     <div className="action-footer"><span><i />{a.owner}</span><button className="text-button" onClick={onOpen}>Inspect evidence<ArrowUpRight size={16} /></button></div>
   </section>
 }
@@ -225,26 +218,26 @@ function RiskLab({ data, price }: { data: Overview; price: number }) {
   }, [price, recovery, falsePositive, cash, engineerTime])
   function reset() { setRecovery(100); setFalsePositive(2); setCash(0); setEngineerTime(.5) }
   return <div className="risk-grid">
-    <section className="card controls-card"><div className="section-top"><div><span className="eyebrow">ASSUMPTIONS, NOT PREDICTIONS</span><h2>Turn the dials.</h2></div><button className="text-button" onClick={reset}>Reset</button></div>
-      <Slider label="Base recovery achieved" value={recovery} max={150} onChange={setRecovery} display={recovery + '%'} help={'100% means ' + whole(data.recovery.point) + ' GPU-hours, the base policy scenario.'} />
-      <Slider label="Useful jobs disrupted" value={falsePositive} max={50} onChange={setFalsePositive} display={falsePositive + '%'} help="Assumed false-positive rate across both action cohorts. Affected jobs repeat their full observed GPU duration." />
-      <Slider label="Recovered value reduces the bill" value={cash} onChange={setCash} display={cash + '%'} help="Owned or committed capacity may free time without reducing spend. Default: no proven bill reduction." />
-      <Slider label="Operator time per disrupted job" value={engineerTime} max={4} step={.25} onChange={setEngineerTime} display={engineerTime.toFixed(2) + ' h'} help="Illustrative response time, valued at the official price book’s $95 per engineer-hour." />
+    <section className="card controls-card"><div className="section-top"><div><span className="eyebrow">CHANGE THE ASSUMPTIONS</span><h2>Test the financial impact</h2></div><button className="text-button" onClick={reset}>Reset</button></div>
+      <Slider label="Share of planned GPU time freed" value={recovery} max={150} onChange={setRecovery} display={recovery + '%'} help={'100% means ' + whole(data.recovery.point) + ' GPU-hours, our starting estimate. Lower this if fewer jobs can change.'} />
+      <Slider label="Useful jobs disrupted" value={falsePositive} max={50} onChange={setFalsePositive} display={falsePositive + '%'} help="Share of selected jobs interrupted by the change. Each is assumed to repeat its full GPU run." />
+      <Slider label="Share of freed time that lowers spending" value={cash} onChange={setCash} display={cash + '%'} help="Owned or committed capacity may free time without reducing spend. Default: no proven bill reduction." />
+      <Slider label="Staff time per disrupted job" value={engineerTime} max={4} step={.25} onChange={setEngineerTime} display={engineerTime.toFixed(2) + ' h'} help="Estimated time to resolve each disruption, valued at $95 per staff hour." />
     </section>
     <div className="risk-results">{error && <p className="inline-error">{error}</p>}
       <section className={'risk-answer ' + ((scenario?.net_capacity_value_usd || 0) < 0 ? 'negative' : '')}>
         <div className="card-eyebrow"><FlaskConical size={17} />02 / COST OF BEING WRONG</div>
-        <span>Capacity benefit after modeled rework</span><strong>{scenario ? usd(scenario.net_capacity_value_usd) : '…'}</strong>
-        <p>{scenario && scenario.net_capacity_value_usd < 0 ? 'This scenario erases the capacity benefit. Narrow the pilot before proceeding.' : 'The pilot has room to learn, but the benefit depends on these assumptions.'}</p>
-        <div className="risk-equation"><div><small>Capacity value</small><b>{scenario ? compact(scenario.capacity_value_usd) : '—'}</b></div><span>−</span><div><small>Rework cost</small><b>{scenario ? compact(scenario.downside_usd) : '—'}</b></div><span>=</span><div><small>Net value</small><b>{scenario ? compact(scenario.net_capacity_value_usd) : '—'}</b></div></div>
+        <span>Value of freed GPU time, after rework</span><strong>{scenario ? usd(scenario.net_capacity_value_usd) : '…'}</strong>
+        <p>{scenario && scenario.net_capacity_value_usd < 0 ? 'Rework costs exceed the value of freed GPU time. Reduce disruption before expanding the trial.' : 'The value of freed GPU time exceeds rework costs under these assumptions. Confirm both in a trial.'}</p>
+        <div className="risk-equation"><div><small>GPU time value</small><b>{scenario ? compact(scenario.capacity_value_usd) : '—'}</b></div><span>−</span><div><small>Rework cost</small><b>{scenario ? compact(scenario.downside_usd) : '—'}</b></div><span>=</span><div><small>Net value</small><b>{scenario ? compact(scenario.net_capacity_value_usd) : '—'}</b></div></div>
       </section>
-      <section className="card risk-details"><div className="section-top"><h3>The downside, made concrete</h3><ShieldCheck size={19} /></div>
+      <section className="card risk-details"><div className="section-top"><h3>Costs included in this estimate</h3><ShieldCheck size={19} /></div>
         <div><span>GPU work repeated</span><strong>{scenario ? whole(scenario.rerun_gpu_hours) : '—'} GPU-h</strong></div>
-        <div><span>Operator time</span><strong>{scenario ? whole(scenario.engineer_hours) : '—'} hours</strong></div>
-        <div><span>Break-even disruption rate</span><strong>{scenario ? pct(scenario.break_even_false_positive * 100) : '—'}</strong></div>
-        <div className="cash-row"><span>Gross modeled bill reduction</span><strong>{scenario ? usd(scenario.gross_bill_reduction_usd) : '—'}</strong></div>
-        <div><span>Bill reduction less valued rework</span><strong>{scenario ? usd(scenario.net_bill_value_usd) : '—'}</strong></div>
-        <p>{cash === 0 ? 'No bill reduction assumed. Freed capacity can still reduce contention; that is a different benefit.' : 'Cash reduction requires a real billing or procurement change. This slider does not establish one.'}</p>
+        <div><span>Staff time</span><strong>{scenario ? whole(scenario.engineer_hours) : '—'} hours</strong></div>
+        <div><span>Disruption rate that erases the benefit</span><strong>{scenario ? pct(scenario.break_even_false_positive * 100) : '—'}</strong></div>
+        <div className="cash-row"><span>Bill reduction before rework</span><strong>{scenario ? usd(scenario.gross_bill_reduction_usd) : '—'}</strong></div>
+        <div><span>Bill reduction minus rework value</span><strong>{scenario ? usd(scenario.net_bill_value_usd) : '—'}</strong></div>
+        <p>{cash === 0 ? 'No bill reduction is assumed. Freed GPU time can be reused for other work.' : 'Cash reduction requires a real billing or procurement change. This slider does not establish one.'}</p>
       </section>
     </div>
     <div className="risk-footnote"><CircleHelp size={16} /><p>{scenario?.caveat || 'This is a decision model, not a forecast.'} Pilot measurements should replace these inputs before rollout.</p></div>
@@ -267,20 +260,20 @@ function EvidencePage({ data, price, onOpen }: { data: Overview; price: number; 
   }
   return <>
     <div className="evidence-summary">{data.actions.map(a => <button className="card evidence-shortcut" key={a.id} onClick={() => onOpen(a.id)}><FileCheck2 size={24} /><div><strong>{a.short_title}</strong><span>{whole(a.finding_count)} linked findings · {whole(a.job_count)} jobs</span></div><ArrowUpRight size={19} /></button>)}</div>
-    <section className="card causal-card"><div className="section-top"><div><span className="eyebrow">A REAL CAUSAL CHECK</span><h2>Fix the shared problem.</h2></div><span className="pill green">Real telemetry</span></div>
-      <p className="section-description">A machine with failed jobs is not necessarily a failed machine. Follow the array that connects them.</p>
+    <section className="card causal-card"><div className="section-top"><div><span className="eyebrow">SHARED WORKLOAD INVESTIGATION</span><h2>Investigate the workload first</h2></div><span className="pill green">Real telemetry</span></div>
+      <p className="section-description">Related tasks failed across several machines. Check what they share before removing machines from service.</p>
       {error && <p className="inline-error">{error}</p>}
       {!caseData ? <LoaderCircle className="spin" /> : <>
         <div className="causal-grid"><div className="causal-copy"><div className="causal-numbers"><div><strong>{whole(caseData.tasks)}</strong><span>failed tasks</span></div><div><strong>{caseData.nodes}</strong><span>machines involved</span></div><div><strong>1</strong><span>shared array</span></div></div>
           <h3>{caseData.decision}</h3><p>{caseData.causal?.message}</p><p className="small-muted">{caseData.limitation}</p>
-          <button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}{busy ? 'Following MCP evidence…' : 'Investigate with MCP'}</button></div>
+          <button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}{busy ? 'Retrieving evidence…' : 'Explain the evidence'}</button></div>
           <div className="causal-graph"><div className="graph-root"><Layers3 size={24} /><span>Shared workload<strong>{caseData.root_name}</strong></span></div><div className="graph-stem" /><div className="graph-nodes">{caseData.node_counts.slice(0, 4).map((n: any) => <div key={n.node}><Cpu size={20} /><strong>{n.jobs} tasks</strong><span>{n.node}</span></div>)}</div><p>Failures spread across machines; check the common workload.</p></div>
         </div>
         <details className="json-details"><summary>Inspect official causal response and finding ID</summary><pre>{JSON.stringify({ finding_id: caseData.finding_id, response: caseData.causal }, null, 2)}</pre></details>
       </>}
       {brief && <Briefing brief={brief} />}
     </section>
-    <section className="card quiet-card"><ShieldCheck size={28} /><div><h3>Negative evidence matters, too.</h3><p>The PCIe saturation rule is armed but never fires in this sample. It provides no support for a PCIe-capacity upgrade; it does not rule out every data-loading bottleneck.</p></div><span className="pill green">Rule: CLEAR</span></section>
+    <section className="card quiet-card"><ShieldCheck size={28} /><div><h3>No evidence here for a PCIe upgrade</h3><p>The PCIe saturation rule is armed but never fires in this sample. It provides no support for a PCIe-capacity upgrade; it does not rule out every data-loading bottleneck.</p></div><span className="pill green">Rule: CLEAR</span></section>
   </>
 }
 
@@ -306,7 +299,7 @@ function NodeBriefing({ price }: { price: number }) {
       setBrief(await r.json())
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
-  return <div className="node-brief"><button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{busy ? 'Following MCP evidence…' : 'Explain the hardware audit with MCP'}</button><p className="small-muted research-note">This briefing uses the reference episode and default drain assumptions. The sliders above are a separate sensitivity check.</p>{error && <p className="inline-error">{error}</p>}{brief && <Briefing brief={brief} />}</div>
+  return <div className="node-brief"><button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{busy ? 'Retrieving evidence…' : 'Explain the machine recommendation'}</button><p className="small-muted research-note">This explanation uses the recorded failure episode and the starting cost assumptions. It does not update with the sliders above.</p>{error && <p className="inline-error">{error}</p>}{brief && <Briefing brief={brief} />}</div>
 }
 
 function EvidenceDrawer({ actionId, price, agent, onClose }: { actionId: string; price: number; agent: boolean; onClose: () => void }) {
@@ -339,20 +332,20 @@ function EvidenceDrawer({ actionId, price, agent, onClose }: { actionId: string;
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
   return <dialog className="evidence-dialog" ref={dialog} onCancel={onClose} onClick={e => { if (e.target === e.currentTarget) onClose() }} aria-label="Recommendation evidence">
-    <div className="drawer-inner"><div className="drawer-top"><span className="eyebrow"><FileCheck2 size={15} />EVIDENCE DOSSIER</span><button className="icon-button" onClick={onClose} aria-label="Close evidence"><X size={20} /></button></div>
+    <div className="drawer-inner"><div className="drawer-top"><span className="eyebrow"><FileCheck2 size={15} />SUPPORTING RECORDS</span><button className="icon-button" onClick={onClose} aria-label="Close evidence"><X size={20} /></button></div>
       {error && <p className="inline-error">{error}</p>}
       {!evidence ? <LoaderCircle className="spin" /> : <>
         <h2>{evidence.action.title}</h2><p className="section-description">{evidence.action.description}</p>
-        <div className="drawer-metrics"><div><span>Base capacity value</span><strong>{usd(evidence.action.value.point)}</strong></div><div><span>Recovery scenario</span><strong>{whole(evidence.action.recovery.point)}<small> GPU-h</small></strong></div><div><span>Verified cohort</span><strong>{whole(evidence.action.job_count)}<small> jobs</small></strong></div></div>
+        <div className="drawer-metrics"><div><span>Potential GPU time value</span><strong>{usd(evidence.action.value.point)}</strong></div><div><span>GPU time potentially freed</span><strong>{whole(evidence.action.recovery.point)}<small> GPU-h</small></strong></div><div><span>Matching jobs</span><strong>{whole(evidence.action.job_count)}<small> jobs</small></strong></div></div>
         <div className="drawer-ai"><div><Sparkles size={18} /><span>{agent ? 'Explain the evidence with Featherless' : 'Review the evidence through MCP'}</span></div><button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <ArrowUpRight size={15} />}{busy ? 'Investigating…' : 'Get briefing'}</button></div>
         {brief && <Briefing brief={brief} />}
-        <section className="drawer-section"><h3>The calculation</h3><code className="filter-code">{evidence.action.formula}</code><p>{evidence.action.savings_basis}</p><div className="calc-line"><span>Capped eligible capacity</span><b>{whole(evidence.action.eligible_gpu_hours)} GPU-h</b></div><div className="calc-line"><span>Recovery range</span><b>{whole(evidence.action.recovery.low)}–{whole(evidence.action.recovery.high)} GPU-h</b></div></section>
+        <section className="drawer-section"><h3>The calculation</h3><code className="filter-code">{evidence.action.formula}</code><p>{evidence.action.savings_basis}</p><div className="calc-line"><span>GPU time eligible for the trial</span><b>{whole(evidence.action.eligible_gpu_hours)} GPU-h</b></div><div className="calc-line"><span>Potential GPU time freed</span><b>{whole(evidence.action.recovery.low)}–{whole(evidence.action.recovery.high)} GPU-h</b></div></section>
         <section className="drawer-section"><div className="section-top"><h3>Jobs behind the number</h3><span className="small-muted">Largest allocation first</span></div><div className="table-scroll"><table><thead><tr><th>Job ID</th><th>Outcome</th><th>GPU-h</th><th>Avg / peak SM</th><th /></tr></thead><tbody>{evidence.jobs.rows.map(j => <tr key={j.id}><td><button className="job-link" onClick={() => inspect(j.id)}>{j.id}</button></td><td><span className={'state ' + j.state.toLowerCase()}>{j.state.replaceAll('_', ' ')}</span></td><td>{whole(j.gpu_hours)}</td><td>{j.avg_util}% / {j.peak_util}%</td><td><button className="icon-button" onClick={() => inspect(j.id)} aria-label={'Inspect job ' + j.id}><ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div>
           <div className="pagination"><span>{offset + 1}–{Math.min(offset + evidence.jobs.limit, evidence.jobs.total)} of {whole(evidence.jobs.total)} jobs</span><div><button className="icon-button" aria-label="Previous jobs" disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - 25))}><ChevronLeft size={17} /></button><button className="icon-button" aria-label="Next jobs" disabled={offset + evidence.jobs.limit >= evidence.jobs.total} onClick={() => setOffset(o => o + 25)}><ChevronRight size={17} /></button></div></div>
           {rawBusy && <LoaderCircle className="spin" size={18} />}
           {raw && <div className="raw-record" ref={rawRecord}><div className="section-top"><h4>Raw job {raw.job.id_job}</h4><button className="icon-button" aria-label="Close raw record" onClick={() => setRaw(null)}><X size={16} /></button></div><p className="small-muted">{raw.source}</p><pre>{JSON.stringify(raw, null, 2)}</pre></div>}
         </section>
-        <section className="drawer-section"><h3>What could go wrong</h3><p>{evidence.action.downside}</p><div className="pilot-box"><strong>Pilot</strong><p>{evidence.action.pilot}</p><strong>Rollback</strong><p>{evidence.action.rollback}</p></div></section>
+        <section className="drawer-section"><h3>What could go wrong</h3><p>{evidence.action.downside}</p><div className="pilot-box"><strong>Trial</strong><p>{evidence.action.pilot}</p><strong>When to reverse the change</strong><p>{evidence.action.rollback}</p></div></section>
         <details className="json-details"><summary>Source, grain, and deduplication method</summary>{Object.entries(evidence.method).map(([k, v]) => <p key={k}><strong>{k.replaceAll('_', ' ')}:</strong> {v}</p>)}</details>
         <details className="json-details"><summary>Inspect {evidence.findings.length} representative MantisGrid findings</summary><pre>{JSON.stringify(evidence.findings, null, 2)}</pre></details>
       </>}
@@ -362,10 +355,10 @@ function EvidenceDrawer({ actionId, price, agent, onClose }: { actionId: string;
 
 function Method({ data }: { data: Overview }) {
   return <div className="method-grid">
-    <section className="card"><span className="eyebrow">01 / ACCOUNTING</span><h2>The total is not the opportunity.</h2><p>Findings overlap and mix impact types. Summing their impact yields {whole(data.accounting.naive_finding_hours)} GPU-hours, exceeding the sample’s {whole(data.sample.gpu_hours)} hours.</p><p>We recompute candidate cohorts from job records, cap duration against allocation, exclude retries, and give CPU placement precedence. {data.accounting.overlap_removed_jobs} jobs are counted only once.</p><div className="method-stat"><span>Overlap removed</span><strong>{data.accounting.overlap_removed_jobs} jobs</strong></div></section>
-    <section className="card"><span className="eyebrow">02 / WHAT WE KNOW</span><h2>Facts and assumptions stay visible.</h2><p>Job outcomes, allocated time, and GPU utilization are observed. Recovery rates, disruption rates, and bill reduction are assumptions that need a pilot.</p><p>The recovery interval varies adoption and feasibility assumptions. It is not a statistical confidence interval. Actual recovery could be zero.</p><div className="method-stat"><span>Unmeasured intervention effects</span><strong>Explicit scenarios</strong></div></section>
-    <section className="card"><span className="eyebrow">03 / SCOPE</span><h2>A sample, not the whole fleet.</h2><p>{whole(data.sample.jobs)} jobs from {data.sample.researchers} researchers ran on {data.sample.nodes} machines in this observed window. Job telemetry cannot establish total unallocated fleet idle time.</p><p>The {data.accounting.synthetic_findings} synthetic shared-storage findings are excluded from savings. The array investigation uses real telemetry.</p><div className="method-stat"><span>Price book</span><strong>{data.price.version}</strong></div></section>
-    <section className="card"><span className="eyebrow">04 / DECISION QUALITY</span><h2>Test the recommendation.</h2><p>Low utilization is a symptom. Cancellation may preserve research resources. A node hosting failed tasks may be healthy. Findings start investigations; they do not authorize changes.</p><p>The MCP workflow retrieves rules and evidence. Deterministic code computes every dashboard number. Model explanations are labeled separately and include their tool trace.</p><div className="method-stat"><span>Action policy</span><strong>Pilot → measure → decide</strong></div></section>
+    <section className="card"><span className="eyebrow">01 / ACCOUNTING</span><h2>How double counting is prevented</h2><p>Findings overlap and mix impact types. Summing their impact yields {whole(data.accounting.naive_finding_hours)} GPU-hours, exceeding the sample’s {whole(data.sample.gpu_hours)} hours.</p><p>We recompute candidate cohorts from job records, cap duration against allocation, exclude retries, and give CPU placement precedence. {data.accounting.overlap_removed_jobs} jobs are counted only once.</p><div className="method-stat"><span>Overlap removed</span><strong>{data.accounting.overlap_removed_jobs} jobs</strong></div></section>
+    <section className="card"><span className="eyebrow">02 / WHAT WE KNOW</span><h2>Measured data and assumptions</h2><p>Job outcomes, allocated time, and GPU utilization are observed. Recovery rates, disruption rates, and bill reduction are assumptions that need a pilot.</p><p>The recovery interval varies adoption and feasibility assumptions. It is not a statistical confidence interval. Actual recovery could be zero.</p><div className="method-stat"><span>Unmeasured intervention effects</span><strong>Explicit scenarios</strong></div></section>
+    <section className="card"><span className="eyebrow">03 / SCOPE</span><h2>What this sample covers</h2><p>{whole(data.sample.jobs)} jobs from {data.sample.researchers} researchers ran on {data.sample.nodes} machines in this observed window. Job telemetry cannot establish total unallocated fleet idle time.</p><p>The {data.accounting.synthetic_findings} synthetic shared-storage findings are excluded from savings. The array investigation uses real telemetry.</p><div className="method-stat"><span>Price book</span><strong>{data.price.version}</strong></div></section>
+    <section className="card"><span className="eyebrow">04 / DECISION QUALITY</span><h2>What the trials must confirm</h2><p>Low utilization is a symptom. Cancellation may preserve research resources. A node hosting failed tasks may be healthy. Findings start investigations; they do not authorize changes.</p><p>The MCP workflow retrieves rules and evidence. Deterministic code computes every dashboard number. Model explanations are labeled separately and include their tool trace.</p><div className="method-stat"><span>Action policy</span><strong>Pilot → measure → decide</strong></div></section>
       <section className="card method-wide"><div className="section-top"><h3>Reproduce this analysis</h3><FileCheck2 size={20} /></div><p>Run the official preparation, generator, and checksum commands, then start the dashboard with Docker Compose. Claims are generated from the same accounting functions as the interface.</p><pre>make prep{'\n'}make generate{'\n'}make check-data{'\n'}docker compose up{'\n'}make validate CLAIMS=claims.json URL=http://localhost:3000</pre><p className="small-muted">Data: MIT SuperCloud TX-GAIA, HPCA ’22 · CC BY-NC-ND 4.0. Telemetry is excluded from the submission. Live briefings send small evidence excerpts to the configured Featherless service. Dollar amounts use a reference price, not an invoice.</p></section>
   </div>
 }
