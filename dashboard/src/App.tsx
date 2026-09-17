@@ -306,7 +306,7 @@ function NodeBriefing({ price }: { price: number }) {
       setBrief(await r.json())
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
-  return <div className="node-brief"><button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{busy ? 'Following MCP evidence…' : 'Explain the hardware audit with MCP'}</button>{error && <p className="inline-error">{error}</p>}{brief && <Briefing brief={brief} />}</div>
+  return <div className="node-brief"><button className="button primary" onClick={explain} disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{busy ? 'Following MCP evidence…' : 'Explain the hardware audit with MCP'}</button><p className="small-muted research-note">This briefing uses the reference episode and default drain assumptions. The sliders above are a separate sensitivity check.</p>{error && <p className="inline-error">{error}</p>}{brief && <Briefing brief={brief} />}</div>
 }
 
 function EvidenceDrawer({ actionId, price, agent, onClose }: { actionId: string; price: number; agent: boolean; onClose: () => void }) {
