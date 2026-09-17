@@ -1,0 +1,74 @@
+# Judged entry point: dashboard on :3000, official + Reclaim API on :8000.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - ./data:/app/data:ro
+    env_file:
+      - path: .env
+        required: false
+    environment: [PYTHONUNBUFFERED=1]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api: {condition: service_healthy}
+
+  # Run once after downloading the raw data:
+  #   docker compose run --rm prep
+  # It uses the official pinned preparation image, so the tables it writes are
+  # byte-identical on every machine.
+  prep:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.local
+    volumes:
+      - ./data:/app/data
+      - ./scripts:/app/scripts:ro
+    command: ["python", "scripts/prep_data.py"]
+    profiles: ["tools"]
+
+  # Run after prep:
+  #   docker compose run --rm generate
+  # Runs the generator in bin/ that matches this machine's chip, reading
+  # data/prepped/ and writing data/synthetic/. It is copied to /tmp first so it
+  # runs even if the file lost its executable bit (a repository downloaded as a ZIP).
+  generate:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.local
+    volumes:
+      - ./data:/app/data
+      - ./bin:/app/bin:ro
+    command: ["sh", "/app/scripts/generate_localfs.sh"]
+    environment: [GOGC=off]
+    profiles: ["tools"]
+
+  notebook:
+    profiles: ["notebook"]
+    build:
+      context: .
+      dockerfile: starter/Dockerfile
+    ports: ["8888:8888"]
+    volumes: ["./starter:/work"]
+    environment:
+      - MGAI_URL=http://api:8000
+    depends_on:
+      api: {condition: service_healthy}
+    command: >
+      jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+      --allow-root --NotebookApp.token='' --NotebookApp.password=''

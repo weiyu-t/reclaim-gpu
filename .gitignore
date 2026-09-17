@@ -1,0 +1,26 @@
+# Source and generated telemetry must remain local.
+data/raw/
+data/prepped/
+data/synthetic/
+data/reports/
+
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+.DS_Store
+out/
+.env
+.env.*
+!.env.example
+node_modules/
+dashboard/dist/
+*.log
+.docker-local/
+.pytest_cache/
+test-results/
+playwright-report/
+core
+*.core
+*.zip
+*.tsbuildinfo

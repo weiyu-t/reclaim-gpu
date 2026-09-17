@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+data/raw
+data/prepped
+data/synthetic
+data/reports
+node_modules
+dashboard/node_modules
+dashboard/dist
+.venv
+out
+__pycache__
+*.log
+.docker-local
+core
+*.core

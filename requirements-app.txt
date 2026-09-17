@@ -1,0 +1,11 @@
+numpy==2.5.2
+pandas==3.0.5
+pyarrow==25.0.1
+scipy==1.18.1
+fastapi==0.141.1
+uvicorn==0.52.4
+slowapi==0.1.10
+httpx==0.28.1
+python-dotenv==1.2.3
+jsonschema==4.26.0
+fastmcp==4.0.5

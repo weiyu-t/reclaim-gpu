@@ -1,0 +1,60 @@
+{
+  "team": "Reclaim",
+  "node_triage": [
+    {
+      "node": "r216287-n200569",
+      "window": 0,
+      "cause": "hardware",
+      "reasoning": "Joined gpus.Node/id_job to jobs.id_job/time_end/exit_code. In the enclosed episode, 114 FAILED jobs from 3 researchers share exit status 135 here, versus 0/311 same-window jobs elsewhere for those researchers. This supports targeted hardware inspection; it does not attribute every failure to hardware.",
+      "verdict": "act"
+    },
+    {
+      "node": "r1039410-n772143",
+      "window": 8,
+      "cause": "user_code",
+      "reasoning": "Joined gpus.Node/id_job to jobs.id_job/time_end/id_user/id_array_job/exit_code. One researcher owns 32/34 failures. Their array contributes 32 local failures; 568/568 same-window sibling jobs elsewhere fail with the same packed exit code 256. Other researchers here have 2/14 FAILED jobs. Investigate the shared workload/environment; this does not identify the exact code defect.",
+      "verdict": "no_action"
+    },
+    {
+      "node": "r216287-n200569",
+      "window": 3,
+      "cause": "cannot_determine",
+      "reasoning": "Joined gpus.Node/id_job to jobs.id_job/time_end/id_user/id_array_job. The window has 33/62 FAILED jobs. The dominant researcher owns 20/33 failures; other researchers have 13/35 failures. No matching hardware episode or sufficiently replicated same-array/exit-code control establishes cause. Failure concentration alone cannot distinguish workload mix, user code and hardware. Collect controlled reruns and node diagnostics.",
+      "verdict": "monitor"
+    }
+  ],
+  "hardware_attributable_failures": 31,
+  "hardware_attributable_rationale": "Distinct GPU jobs with hit_node_failure, reconciled to nodefail_attempts from the scheduler requeue history. This is a scheduler-recorded count, not an estimate of all hardware failures. Failed-attempt nodefail_nodes are used for placement; a retry's final node is not blamed. 31 jobs experienced 39 recorded failed attempts; only 10 end in NODE_FAIL. The separate SIGBUS episode is investigated but not added to this scheduler-only count.",
+  "card_imbalance_gpu_hours": {
+    "point": 4100.17,
+    "low": 2475.48,
+    "high": 4685.45,
+    "interval_kind": "scenario",
+    "basis": "Per (Node, gpu_id, id_job), recompute busiest-minus-quietest average SM >30 points and busiest \u226520%; job COMPLETED, walltime >1h, attempts=1. Point exposure: card average AND peak SM =0. Clip each card's hours to job walltime. Bounds vary peak and memory evidence, not a statistical confidence interval. Bounds represent measured exposure under different evidence thresholds, not recovered time. Excluded from recoverable_gpu_hours."
+  },
+  "card_imbalance_rationale": "These are observed quiet-card exposure thresholds, not recovery rates. Zero compute can coexist with useful memory or transfers. Memory is a peak measurement; coarse/censored PCIe counters do not establish sustained useful traffic. No card hours are added to the recovery headline until a right-sizing pilot establishes feasibility. Workload owners should audit device binding, memory residency and communication; replay with fewer cards and verify output parity and runtime before changing defaults.",
+  "card_imbalance_index_reasoning": "Selected quiet-card rows by local gpu_id: {'0': 365, '1': 15}. Card index is an observed placement association; device numbering does not identify a defective GPU. Use (Node, gpu_id, id_job), not gpu_id alone.",
+  "recoverable_gpu_hours": {
+    "point": 16206.57,
+    "low": 8879.8,
+    "high": 24377.49,
+    "interval_kind": "scenario",
+    "basis": "cpu-placement: 463 jobs; 11985.85 capped eligible GPU-hours. 50% / 75% / 95% of capped GPU-hours become available after CPU placement. These are adoption and feasibility scenarios, not measured treatment effects. idle-sessions: 797 jobs; 28868.72 capped eligible GPU-hours. 10% / 25% / 45% of capped hours beyond a four-hour grace period. Job averages do not locate continuous idle periods; recovery is a policy scenario. CPU cohort owns overlaps. Excludes requeues. No causal recovery rate has been measured; actual recovery may be zero."
+  },
+  "recoverable_usd": {
+    "low": 22199.5,
+    "point": 40516.43,
+    "high": 60943.73,
+    "interval_kind": "scenario",
+    "basis": "Capacity-equivalent value at USD 2.5/GPU-hour for the observed sample, not demonstrated cash savings or a forecast."
+  },
+  "cancelled_is_waste": false,
+  "cancelled_rationale": "Cancellation alone is not waste. Selected cancelled interactive sessions enter only the explicit long-duration/low-activity policy scenario; no blanket cancellation savings are claimed.",
+  "zero_recovery_stress": {
+    "recoverable_gpu_hours": 0,
+    "capacity_value_usd": 0,
+    "net_capacity_value_usd": -3452.71,
+    "basis": "No realized recovery, with the default 2% disruption and 0.5 operator hours per affected job. The low recovery scenario is not a guarantee or a lower confidence bound."
+  },
+  "notes": "Intervals are assumption scenarios, not statistical confidence intervals. No calibrated probability is claimed for intervention success. All savings use real telemetry; the synthetic storage incident is excluded. Policy reclaim-v2"
+}
