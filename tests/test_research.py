@@ -100,3 +100,15 @@ def test_node_investigation_uses_mcp_and_safe_keyless_brief(monkeypatch, tmp_pat
               "pilot": "Use controlled reruns.", "finding_id": obs["decision_evidence"]["finding_id"]}
     assert "0.022 GPU-hours" in inv.final_brief(json.dumps(answer), obs)
     inv._cache.clear()
+
+
+def test_node_financial_downside_cannot_invert_cost_and_net_benefit():
+    e = inv.decision_evidence("node-audit")
+    answer = {"recommendation": "Inspect the machine.",
+              "downside": "The drain cost is negative and inspection provides no value.",
+              "pilot": "Compare controlled reruns.", "finding_id": e["finding_id"]}
+    brief = inv.final_brief(json.dumps(answer), {"decision_evidence": e})
+    assert "cost is negative" not in brief
+    assert "provides no value" not in brief
+    assert "cost USD 115.00" in brief and "USD 0.03 of avoided GPU time" in brief
+    assert "inspection may still be justified" in brief
