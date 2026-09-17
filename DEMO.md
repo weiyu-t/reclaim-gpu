@@ -14,7 +14,8 @@ If a term or number feels unclear, read [DEMO_GUIDE.md](DEMO_GUIDE.md) first. Yo
 2. Leave the top-right price at **$2.50 per GPU-hour**.
 3. Open **Downside costs**, click **Reset**, then return to **Overview**.
 4. Try the **Explain the machine recommendation** button on **Machine review** once. This lets you see the explanation before presenting it. Return to Overview.
-5. Have this script beside your screen. Keep your API key and `.env` file out of the recording.
+5. In **Trial planner**, choose **Test CPU-only placement**, **Top 3**, and **Owned equipment**. Any commercial checkboxes should be unchecked for the demo. Draft fields persist in this browser.
+6. Have this script beside your screen. Keep your API key and `.env` file out of the recording.
 
 ## The 30-second version
 
@@ -30,77 +31,69 @@ Those figures describe a scenario applied to the eligible work in the historical
 
 ## Four-minute walkthrough for judges
 
-### 0:00–0:35 — What does this help someone do?
+### 0:00–0:25 — The decision
 
-**Click:** Start on **Overview**. Point to **$40.5K** under **Potential value of GPU time freed**.
+**Click:** Start on **Overview**. Point across the three large figures and the bill reduction line.
 
-> This is Reclaim. It helps someone responsible for the computing budget decide where to reduce waste without interrupting useful work.
+> Reclaim helps a computing budget owner decide what to test, what could go wrong, and whether the bill would actually fall.
 >
-> We examined records from 225 machines and found two changes worth testing. Under our starting assumptions, they could free GPU time valued at around forty thousand dollars.
+> These two changes could free GPU time valued at about forty thousand dollars under our assumptions. We have not measured that saving yet. The next step is a limited trial.
+
+### 0:25–1:00 — The evidence
+
+**Click:** **Proposed trials** → **Inspect evidence** under **Test CPU-only placement**. Scroll to **Jobs behind the number**, briefly open a job, then close the evidence panel.
+
+> We found 463 tasks that finished successfully but recorded no GPU computing. We would ask their owners to test repeat runs on CPUs, checking the results and how long the work takes.
 >
-> That means computing time we could reuse. It does not mean the company has already saved that money.
+> Every recommendation connects to source records. The second trial would warn owners about long, quiet GPU sessions before considering any timeout.
 
-### 0:35–1:20 — What would we actually change?
+### 1:00–1:30 — The cost of mistakes
 
-**Click:** **Proposed trials** → **Inspect evidence** under **Test CPU-only placement**. Scroll to **Jobs behind the number** and click one job ID. Briefly show the record, then close the large evidence panel using its top-right X.
+**Click:** **Downside costs**. Move **Useful jobs disrupted** from **2%** to around **30%**. Pause for the result, then **Reset**.
 
-> The first idea comes from 463 tasks that finished successfully but recorded no GPU computing activity. We would test whether those tasks can run on a regular CPU instead, leaving the GPU available for work that needs it.
+> An incorrect recommendation can create more work. This calculation includes repeated computing and staff time.
 >
-> We can open the actual records behind that suggestion. We would check that the results stay correct and the work does not become slower before changing the default.
+> When I increase the share of useful work we interrupt, the result becomes negative: rework costs more than the GPU time we free. The slider is a what-if assumption, not a measured error rate.
+
+### 1:30–2:00 — Check the cause before removing a machine
+
+**Click:** **Machine review**. Show **Machine-specific signal**, then **Shared workload signal**. If time allows, show the cached **Explain the machine recommendation** briefing.
+
+> A failed task does not automatically mean a broken computer. We compare problems concentrated on one machine with related work failing across many machines.
 >
-> The second idea is to warn researchers about long GPU sessions with very little activity. We start with a warning because quiet work might still be useful.
+> That changes who should investigate first. Taking machines out of service also has a cost. The AI explains retrieved evidence; calculation code supplies the numbers.
 
-### 1:20–2:00 — What if our advice is wrong?
+If the briefing says **MCP evidence · no model**, say: **“The built-in evidence summary remains available without the AI service.”**
 
-**Click:** **Downside costs**. Point to the result on the right. Move **Useful jobs disrupted** from **2%** to approximately **30%**. Then click **Reset**.
+### 2:00–2:20 — Look inside the average
 
-> A cost-cutting suggestion can create more work if it interrupts something useful.
+**Click:** **GPU usage** → **Which GPU did the work?** Point to the first job’s one busy GPU and three quiet GPUs.
+
+> This job held four GPUs, but only one recorded computing activity. That makes a smaller allocation worth testing. A quiet GPU may still hold useful data, so these hours stay outside our recovery estimate.
+
+### 2:20–3:35 — A focused, funded trial
+
+**Click:** **Trial planner**. Select **Test CPU-only placement** and **Top 3**. Point to **52.4%**. Scroll to **Path to cash** and switch from **Owned equipment** to **Usage-based billing**. Leave the confirmation boxes unchecked.
+
+> Here is the practical insight: three researcher accounts represent over half the GPU time eligible for the CPU trial. We can start by consulting those owners.
 >
-> This screen asks what happens if we get it wrong. It counts the computing work that would have to be repeated and the staff time needed to respond.
+> That percentage describes historical work. It does not predict what a small trial earns.
 >
-> When I increase the share of useful jobs we accidentally interrupt, the result becomes negative. The cost of rework is now larger than the value of the computing time we free.
+> How the company pays matters too. Owned equipment can be reused. A prepaid commitment may need a contract change. Usage-based spending falls only when actual billed resources decrease. These checks identify what finance and operations still need to confirm.
+
+**Click:** Scroll to **Draft for review**. Point to the job limit, spending cap, success criteria and stop conditions. Click **Download trial brief**. Leave the responsible person and review date blank unless you are deliberately entering an example; incomplete briefs are labeled drafts.
+
+> The selected owners carry into a brief with a trial lead, review date, spending cap and stop conditions. These starting limits are editable examples.
 >
-> This is a what-if test, not a prediction.
+> The brief gives the budget owner something specific to review. Downloading it does not approve or execute a change.
 
-### 2:00–2:55 — Is the machine really the problem?
+### 3:35–4:00 — Close
 
-**Click:** **Machine review**. Start with **Machine-specific signal**, then select **Shared workload signal**. Scroll to **What does taking capacity away cost?** and switch from **One targeted machine** to **Five machines**. Return to **One targeted machine**.
+**Click:** Return to **Overview**.
 
-> A failed task does not automatically mean a broken machine.
+> Reclaim connects the evidence to a small next step: who to consult, how money might be saved, and when to stop if the change causes harm.
 >
-> In the first example, the same error keeps appearing on one machine but not in the comparison jobs elsewhere. That machine deserves inspection.
->
-> In the second example, related tasks fail on many machines. We should investigate the shared work before blaming the computers.
->
-> Taking a machine out of service also removes computing time. This calculator shows that cost, including staff effort. Taking five machines out costs more than taking one out.
-
-**Click:** Scroll down to **Explain the machine recommendation**. Click it and show the resulting briefing. You do not need to read it aloud.
-
-> The AI can explain the retrieved evidence. The numbers and this financial comparison come from calculation code.
-
-If the result says **MCP evidence · no model**, replace that last paragraph with:
-
-> The AI service is unavailable, so this is the built-in evidence summary. The calculations still work.
-
-### 2:55–3:30 — What does an average hide?
-
-**Click:** **GPU usage**. Scroll to **Which GPU did the work?** Leave the first job selected. Point to its four GPU rows: one shows **99%** average compute, and three show **0%**.
-
-> Here, one task held four GPUs. One did almost all the computing, while three recorded none.
->
-> Looking only at the task’s average would hide that difference. This is a reason to test whether it can use fewer GPUs.
->
-> But a quiet GPU might still hold useful data. We keep these hours separate from our estimated savings until we test the change and check the results.
-
-### 3:30–4:00 — What is the recommendation?
-
-**Click:** Return to **Overview**. Point to **Export claims**; you can click it to download the numbers.
-
-> Reclaim’s recommendation is to start with a small test, check the results with the people doing the work, and expand only when the evidence supports it.
->
-> I built this with AI coding assistance and MantisGrid’s data tools. The dashboard links recommendations to records, shows the cost of mistakes, and exports its calculations for review.
->
-> It helps the budget owner make a decision they can explain.
+> I built it with AI coding assistance and MantisGrid’s tools. The original contribution is the decision workflow and the investigations behind it.
 
 ## If you lose your place
 

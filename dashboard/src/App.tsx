@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { NodeDecisions, GPUCards } from './Investigations'
+import { TrialPlanner } from './TrialPlanner'
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown,
   ChevronLeft, ChevronRight, CircleHelp, Clock3, Cpu, Database, Download,
   FileCheck2, FlaskConical, Gauge, LayoutDashboard, Layers3, LoaderCircle,
-  Network, Search, ShieldCheck, SlidersHorizontal, Sparkles, Target, X,
+  Network, Search, ShieldCheck, SlidersHorizontal, Sparkles, Target, X, ClipboardList,
 } from 'lucide-react'
 
 type Range = { low: number; point: number; high: number }
@@ -50,7 +51,7 @@ type Scenario = {
   net_capacity_value_usd: number; gross_bill_reduction_usd: number; net_bill_value_usd: number; engineer_hours: number
   rerun_gpu_hours: number; affected_jobs_equivalent: number; break_even_false_positive: number; caveat: string
 }
-type Tab = 'overview' | 'plan' | 'risk' | 'evidence' | 'nodes' | 'cards' | 'method'
+type Tab = 'overview' | 'plan' | 'risk' | 'evidence' | 'nodes' | 'cards' | 'method' | 'planner'
 const whole = (n: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n)
 const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 const compact = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n)
@@ -81,6 +82,7 @@ function App() {
   const nav = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'plan', label: 'Proposed trials', icon: Layers3 },
+    { id: 'planner', label: 'Trial planner', icon: ClipboardList },
     { id: 'risk', label: 'Downside costs', icon: SlidersHorizontal },
     { id: 'nodes', label: 'Machine review', icon: ShieldCheck },
     { id: 'cards', label: 'GPU usage', icon: Cpu },
@@ -125,8 +127,8 @@ function App() {
           {error && <div className="inline-error">{error} <button onClick={() => setRevision(r => r + 1)}>Retry</button></div>}
           <div className="page-heading">
             <div><div className="eyebrow">GPU BUDGET INTELLIGENCE</div>
-              <h1>{tab === 'overview' ? 'GPU budget decision' : tab === 'plan' ? 'Proposed trials' : tab === 'risk' ? 'Cost of an incorrect recommendation' : tab === 'nodes' ? 'Which machines need inspection?' : tab === 'cards' ? 'Where fewer GPUs may be enough' : tab === 'evidence' ? 'Evidence behind the recommendations' : 'Sources and assumptions'}</h1>
-              <p>{tab === 'overview' ? 'Potential benefit, downside, and spending impact.' : tab === 'plan' ? 'Two changes to test with workload owners before a wider rollout.' : tab === 'risk' ? 'Estimate the cost of interrupted work before approving a change.' : tab === 'nodes' ? 'Compare machine faults with problems in the work running on them.' : tab === 'cards' ? 'Check each GPU before reducing the number assigned to a job.' : tab === 'evidence' ? 'Review the source records and the reasons for each proposed action.' : 'How the estimates are calculated and what still needs testing.'}</p>
+              <h1>{tab === 'overview' ? 'GPU budget decision' : tab === 'plan' ? 'Proposed trials' : tab === 'planner' ? 'Plan a focused trial' : tab === 'risk' ? 'Cost of an incorrect recommendation' : tab === 'nodes' ? 'Which machines need inspection?' : tab === 'cards' ? 'Where fewer GPUs may be enough' : tab === 'evidence' ? 'Evidence behind the recommendations' : 'Sources and assumptions'}</h1>
+              <p>{tab === 'overview' ? 'Potential benefit, downside, and spending impact.' : tab === 'plan' ? 'Two changes to test with workload owners before a wider rollout.' : tab === 'planner' ? 'Choose owners, check the path to cash, and prepare a bounded proposal.' : tab === 'risk' ? 'Estimate the cost of interrupted work before approving a change.' : tab === 'nodes' ? 'Compare machine faults with problems in the work running on them.' : tab === 'cards' ? 'Check each GPU before reducing the number assigned to a job.' : tab === 'evidence' ? 'Review the source records and the reasons for each proposed action.' : 'How the estimates are calculated and what still needs testing.'}</p>
             </div>
             <div className="date-chip"><Clock3 size={14} /><span>{data.window.start} — {data.window.end}<small>Historical sample</small></span></div>
           </div>
@@ -139,7 +141,7 @@ function App() {
                 <div><span>Net value after that rework</span><strong>{compact(data.default_risk.net_capacity_value_usd)}</strong><small>GPU time value less estimated rework</small></div>
               </div>
               <div className="executive-cash"><strong>{usd(data.default_risk.gross_bill_reduction_usd)}</strong><div><b>Bill reduction assumed</b><p>Freed GPU time reduces spending only if billing or purchasing changes.</p></div></div>
-              <div className="executive-footer"><p>Historical sample at ${data.price.usd_per_gpu_hour.toFixed(2)}/GPU-hour. Trial results are unproven; actual recovery could be zero.</p><button className="button mint" onClick={() => navigate('risk')}>Review downside<ArrowUpRight size={16} /></button></div>
+              <div className="executive-footer"><p>Historical sample at ${data.price.usd_per_gpu_hour.toFixed(2)}/GPU-hour. Trial results are unproven; actual recovery could be zero.</p><button className="button mint" onClick={() => navigate('planner')}>Plan a trial<ArrowUpRight size={16} /></button></div>
             </section>
             <div className="section-heading"><div><span className="eyebrow">PROPOSED ACTIONS</span><h2>What to test first</h2></div><button className="text-button" onClick={() => navigate('plan')}>Trial details<ArrowRight size={15} /></button></div>
             <div className="actions-grid">{data.actions.map((a, i) => <ActionCard key={a.id} action={a} index={i} onOpen={() => setSelected(a.id)} />)}</div>
@@ -149,10 +151,12 @@ function App() {
           {tab === 'plan' && <>
             <div className="plan-summary"><ShieldCheck size={23} /><div><strong>Approve a small trial with each workload owner.</strong><p>The starting estimate is {whole(data.recovery.point)} GPU-hours freed. Confirm the results and runtime before changing normal operations.</p></div><span className="pill green">{pct(data.recovery.share_percent)} of sample</span></div>
             <div className="actions-grid">{data.actions.map((a, i) => <ActionCard key={a.id} action={a} index={i} onOpen={() => setSelected(a.id)} expanded />)}</div>
+            <button className="risk-banner" onClick={() => navigate('planner')}><ClipboardList size={26} /><div><strong>Choose owners and prepare a trial brief.</strong><span>Set a scope, spending cap, review date and stop conditions.</span></div><ArrowUpRight size={22} /></button>
             <section className="card dedup-note"><CheckCheck size={23} /><div><h3>Overlapping jobs are counted once.</h3><p>{data.accounting.overlap_removed_jobs} jobs qualify for both trials and are counted under CPU placement only. {data.accounting.excluded_ambiguous_jobs} jobs with unclear duration or retry history are excluded.</p></div><button className="text-button" onClick={() => navigate('method')}>Calculation method<ArrowRight size={15} /></button></section>
             <button className="risk-banner" onClick={() => navigate('risk')}><FlaskConical size={26} /><div><strong>Review the cost of interrupted work.</strong><span>See when rework costs exceed the benefit.</span></div><ArrowUpRight size={22} /></button>
           </>}
           {tab === 'risk' && <RiskLab data={data} price={price} />}
+          {tab === 'planner' && <TrialPlanner price={price} />}
           {tab === 'nodes' && <NodeDecisions price={price} briefing={<NodeBriefing key={price} price={price} />} />}
           {tab === 'cards' && <GPUCards price={price} />}
           {tab === 'evidence' && <EvidencePage data={data} price={price} onOpen={setSelected} />}

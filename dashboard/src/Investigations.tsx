@@ -26,7 +26,7 @@ function useEvidence(path: string) {
   return { data, status, pending }
 }
 
-function RawJob({ id, close }: { id: string; close: () => void }) {
+export function RawJob({ id, close }: { id: string; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null)
   const { data, status } = useEvidence('/jobs/' + id)
   useEffect(() => { ref.current?.showModal() }, [])

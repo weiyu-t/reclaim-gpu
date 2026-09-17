@@ -123,6 +123,21 @@ These are measured exposure thresholds, not recovery rates or statistical confid
 
 Quiet rows skew toward local GPU 0 (365 versus 15 on GPU 1). This is a placement association, not evidence that physical GPU 0 is faulty. There are zero overlapping jobs with the two existing recovery cohorts, but **none of these hours is added to the savings headline** without a fewer-card replay that preserves output parity and acceptable runtime.
 
+## Concentrated opportunities and a bounded decision
+
+A practical next step is to identify which workload owners to consult. We group the existing disjoint action cohorts by anonymized `jobs.id_user`, sum capped eligible GPU-hours, and rank descending by those hours (ties by ascending user ID). The denominator is all eligible time for that action, not total fleet capacity. CPU placement still owns the overlapping jobs; session hours still exclude the four-hour grace period.
+
+| Action | Accounts represented | Top 1 share | Top 3 share | Top 5 share | Accounts for ≥80% |
+|---|---:|---:|---:|---:|---:|
+| CPU placement | 68 | 36.9% | 52.4% | 60.2% | 13 |
+| Session warnings | 68 | 12.8% | 31.5% | 45.7% | 17 |
+
+The top three CPU-placement accounts cover 63 of the 463 eligible jobs and over half of eligible GPU time. This supports a focused conversation with those owners. It does not establish researcher performance, future repetition, removable capacity, or what a small trial will earn. Account IDs do not identify named people or budget owners. Each row links to source jobs from that account and cohort.
+
+The **Trial planner** carries the top 1, 3 or 5 accounts into a draft. Its commercial review distinguishes owned equipment (reuse or a possible deferred purchase), committed capacity (a contract change may be needed), and usage-based charges (billed resources must actually decrease). Operations and finance confirmations are explicitly user statements. Even after every condition is checked, bill savings remain unverified: this dataset has no contracts, invoices or measured intervention results. We do not extrapolate a next-quarter saving or change any submitted claim from those inputs.
+
+The exported HTML brief includes historical scope, a responsible person, review date, proposed job/day/spending limits, success criteria and stop conditions. CPU trials require matching outputs and an editable runtime threshold. Session trials remain warning-only. Defaults of five jobs, seven days, $500 and a 10% maximum runtime increase are editable examples, not observed costs or recommendations that have been tested. Caps require human monitoring; the application neither enforces them nor executes operational changes. Incomplete briefs remain labeled drafts. Browser local storage preserves inputs locally; export recalculates evidence on the API and escapes free text in a script-free document. The brief can be printed or saved as PDF from a browser.
+
 ## API and MCP design
 
 Official FastAPI routes remain available. `/api/reclaim` adds cohort evidence, raw records, scenarios and claims. The investigator uses `fastmcp.Client` against the official server through actual in-process MCP transport. Each investigation retrieves `decision_evidence` (our deterministic tool), official `list_rules`, then official `list_findings` or `causal`.
@@ -145,7 +160,7 @@ To calibrate: preregister cohorts and success criteria, start with shadow warnin
 
 Follow `README.md`. `scripts/export_claims.py` uses the UI's accounting functions, defaulting to $2.50/GPU-hour. UI export honors the selected price. Claims include recovery, cancellation rationale, three investigated node windows, scheduler-recorded hardware failures and per-card exposure; synthetic incident claims remain omitted.
 
-**24 automated checks pass**, covering reconciliation, duration caps, disjoint ownership, cancellation, price invariance, downside, joins, claim/UI agreement, API validation, actual MCP retrieval, provider errors, empty final answers, token aggregation, cache reuse, cohort-specific context and citation validation. Five official checksums and the TypeScript/production frontend build pass. The Docker launch and browser walkthrough are checked locally, including 1280-pixel desktop and 390-pixel phone layouts; `DEMO.md` gives the repeatable sequence.
+**29 automated checks pass**, covering reconciliation, duration caps, disjoint ownership, cancellation, price invariance, downside, joins, claim/UI agreement, API validation, actual MCP retrieval, provider errors, empty final answers, token aggregation, cache reuse, cohort-specific context and citation validation. The five new planning checks cover owner/source joins, monotonic selection and price invariance, commercial evidence boundaries, draft limits and HTML escaping, input validation and unchanged claims. Five official checksums and the TypeScript/production frontend build pass. The Docker launch and browser walkthrough are checked locally, including 1280-pixel desktop and 390-pixel phone layouts; `DEMO.md` gives the repeatable sequence.
 
 The generator and its rules are unchanged. A wrapper uses container-native temporary storage and disables Go GC to avoid an observed local execution issue; outputs remain checksum-identical. Telemetry and generated findings are excluded from Git. AI assistance and inherited code are disclosed in `README.md`.
 

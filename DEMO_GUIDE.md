@@ -93,6 +93,16 @@ A quiet card can still hold useful data in memory. The memory chart shows peak o
 
 **These 4,100 hours are not included in the $40,500 headline.**
 
+## What the Trial planner adds
+
+The first decision is who to speak with. For the CPU idea, three researcher accounts account for **52.4% of eligible GPU time**, across 63 historical jobs. This is why we can start with a focused conversation. It does not mean three people are wasting resources, or that a five-job trial will recover half the total.
+
+The payment choice explains how resource use connects to the budget. Owned equipment can be reused; prepaid capacity may require a contract change; usage-based spending falls only when actual billed resources decrease. The checkboxes record what finance and operations tell us. They do not turn an estimate into verified savings.
+
+The draft brief asks for a trial lead and review date, plus proposed limits. The starting five jobs, seven days, $500 and 10% maximum runtime increase are examples for the owner to edit. The software does not enforce those limits or authorize changes. Download the brief, open it in a browser and print if needed. It stays a draft until someone reviews it.
+
+A useful sentence is: **“We found a concentrated opportunity, then made the next step small enough to review, fund and stop.”**
+
 ## What the AI does—and what we built
 
 The supplied MantisGrid tools provide findings, rules, and relationships between records. Reclaim adds the dashboard, its own calculations and investigations, and the cost-of-mistakes models.

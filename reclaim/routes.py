@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 import json
 from .analysis import analysis
 from .research import research
+from .planning import ActionId, TrialDraft, BILLING_PATHS, shortlist, draft_plan, brief_html
 
 router = APIRouter(prefix="/api/reclaim", tags=["Reclaim — decision workspace"])
 
@@ -97,6 +98,23 @@ def agent_status():
     s = settings()
     return {"configured": bool(s["key"]), "provider": "Featherless",
             "model": s["model"], "tools": "MantisGrid MCP"}
+
+
+@router.get("/trial-shortlist")
+def trial_shortlist(action_id: ActionId = "cpu-placement", owners: int = Query(3, ge=1, le=5),
+                    price: float = Query(2.5, gt=0, le=100)):
+    return {**shortlist(action_id, owners, price), "billing_paths": BILLING_PATHS}
+
+
+@router.post("/trial-plan")
+def trial_plan(draft: TrialDraft):
+    return draft_plan(draft)
+
+
+@router.post("/trial-brief")
+def trial_brief(draft: TrialDraft):
+    return Response(brief_html(draft), media_type="text/html",
+                    headers={"Content-Disposition": 'attachment; filename="reclaim-trial-brief.html"'})
 
 
 class InvestigationRequest(BaseModel):

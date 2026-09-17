@@ -1,6 +1,6 @@
 # Reclaim — GPU budget intelligence
 
-**Spend less. Protect the work.** A Track 2 decision workspace that connects a CFO's recovery plan to actual jobs, makes assumptions adjustable, and prices the cost of a bad decision.
+**A focused GPU budget decision.** Reclaim connects proposed changes to source jobs, estimates the downside, and helps a CFO choose workload owners, check the path to bill savings, and prepare a bounded trial brief.
 
 Solo project by [@weiyu-t](https://github.com/weiyu-t) for the MantisGrid AI Hackathon 2026.
 
@@ -53,11 +53,14 @@ Answers must match a four-field JSON structure and cite a retrieved finding ID. 
 
 - **Overview:** a 30-second decision brief with the proposed trials, potential GPU-time value, rework cost and assumed bill reduction; detailed usage and the target gap follow below.
 - **Proposed trials:** two ranked actions, owner roles, evidence, pilots, and rollback conditions.
+- **Trial planner:** rank the top 1, 3 or 5 researcher accounts by eligible GPU-hours; review owned, committed or usage-based billing; export a printable trial brief with an owner, limits, review date and stop conditions.
 - **Downside costs:** vary recovery, useful work disrupted, operator effort, and how much freed capacity reduces a bill.
 - **Machine review:** compare hardware, workload and unresolved cases; audit the proposed drain recommendation and price a targeted versus five-machine drain.
 - **GPU usage:** inspect paired compute/memory measurements and 2,475–4,685 quiet-card hours under explicit evidence thresholds; kept outside recovery totals.
 - **Evidence:** drill into jobs, per-GPU records and findings; inspect a shared-array failure across 34 machines.
 - **Method:** cohort definitions, overlap handling, sample limits and scenario assumptions.
+
+Trial drafts are saved only in browser local storage and can be downloaded as a standalone HTML brief (open it in a browser to print or save as PDF). The API recalculates the evidence at export. Spending caps and dates are proposed user inputs, not enforced controls; commercial checks are user statements, not verified contracts. Changing the trial action or owner count clears commercial confirmations. No workload changes, approvals or messages are executed. Trial settings do not change `claims.json`.
 
 The price selector recalculates dollars without changing cohorts. “Export claims” downloads the same estimates used by the dashboard.
 
@@ -80,6 +83,7 @@ The official validator accepts the claims schema. Its confidence warning checks 
 |---|---|
 | `dashboard/` | React/TypeScript interface and Nginx proxy |
 | `reclaim/analysis.py` | Cohort accounting, downside scenarios, claims |
+| `reclaim/planning.py` | Owner concentration, commercial verification paths, and safe printable trial briefs |
 | `reclaim/research.py` | Node/window controls, drain cost, per-card exposure |
 | `reclaim/investigator.py` | Bounded MCP retrieval and optional Featherless explanation |
 | `reclaim/routes.py` | Dashboard API, preserving official routes |
