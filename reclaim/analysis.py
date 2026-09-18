@@ -25,10 +25,11 @@ def bounds(hours, fractions):
 
 
 class Analysis:
-    def __init__(self):
-        self.s = store()
+    def __init__(self, snapshot=None):
+        self.s = snapshot if snapshot is not None else store()
         self.jobs = self.s.jobs.copy()
-        self.gpus = pd.read_parquet(ROOT / "data/prepped/gpus.parquet")
+        self.gpus = self.s.gpus
+        self.epoch_offset = self.s.epoch_offset
         self.findings = self.s.findings
         self.by_job = defaultdict(list)
         for f in self.findings:
@@ -106,9 +107,10 @@ class Analysis:
             ]
             out.append({
                 **d, "job_count": len(c), "observed_gpu_hours": number(raw_hours),
+                "eligible": hours > 0,
                 "eligible_gpu_hours": number(hours), "recovery": estimate,
                 "value": {k: number(estimate[k] * price) for k in ("low", "point", "high")},
-                "share_of_sample": number(100 * estimate["point"] / self.s.allocated),
+                "share_of_sample": number(100 * estimate["point"] / self.s.allocated) if self.s.allocated else 0,
                 "weighted_util_pct": number((c.gpu_hours * c.sm_util_avg).sum() / raw_hours) if raw_hours else 0,
                 "finding_count": len(finding_ids), "finding_ids": finding_ids,
                 "completed_jobs": int(c.state_name.eq("COMPLETED").sum()),
@@ -129,10 +131,10 @@ class Analysis:
             spend.append({
                 "state": state, "label": labels.get(state, "Undecoded"),
                 "gpu_hours": number(hours), "usd": number(hours * price),
-                "share": hours / s.allocated, "jobs": len(frame),
+                "share": hours / s.allocated if s.allocated else 0, "jobs": len(frame),
             })
         spend.sort(key=lambda x: -x["gpu_hours"])
-        dates = pd.to_datetime(j.time_start + EPOCH_OFFSET, unit="s", utc=True)
+        dates = pd.to_datetime(j.time_start + self.epoch_offset, unit="s", utc=True)
         weekly = []
         for name, frame in j.groupby(dates.dt.strftime("%G-W%V")):
             weekly.append({
@@ -147,26 +149,36 @@ class Analysis:
             if f.get("metadata", {}).get("impact_scope") == "job"
             and f.get("metadata", {}).get("job_id") is not None
         }
+        eligible = sorted((a for a in actions if a["eligible"]), key=lambda a: -a["value"]["point"])
+        count = len(eligible)
+        decision = {
+            "action_count": count,
+            "title": f"Consider {count} limited trial{'s' if count != 1 else ''}." if count else "No supported savings trial in this dataset.",
+            "description": ("Candidates: " + "; ".join(a["title"] for a in eligible) + ". Confirm feasibility with workload owners.") if count else "The current screening rules found no eligible GPU time. This does not establish that all workloads are efficient.",
+        }
         return {
             "product": "Reclaim", "policy_version": POLICY_VERSION,
+            "dataset": {**s.metadata, "revision": s.revision}, "decision": decision,
             "window": {
-                "start": pd.to_datetime(s.t0 + EPOCH_OFFSET, unit="s", utc=True).strftime("%b %d, %Y"),
-                "end": pd.to_datetime(s.t1 + EPOCH_OFFSET, unit="s", utc=True).strftime("%b %d, %Y"),
+                "start": pd.to_datetime(s.t0 + self.epoch_offset, unit="s", utc=True).strftime("%b %d, %Y") if len(j) else "No jobs",
+                "end": pd.to_datetime(s.t1 + self.epoch_offset, unit="s", utc=True).strftime("%b %d, %Y") if len(j) else "No dates",
             },
             "sample": {"jobs": len(j), "nodes": int(self.gpus.Node.nunique()),
                        "researchers": int(j.id_user.nunique()), "gpu_hours": number(s.allocated)},
             "price": {"usd_per_gpu_hour": price, "usd_per_engineer_hour": 95,
                       "version": "2026-Q3" if price == DEFAULT_PRICE else "2026-Q3+custom"},
             "spend_usd": number(s.allocated * price),
-            "completed_compute_proxy_share": s.computed_completed / s.allocated,
+            "completed_compute_proxy_share": s.computed_completed / s.allocated if s.allocated else 0,
             "target": {"percent": 20, "gpu_hours": number(s.allocated * .2),
                        "value_usd": number(s.allocated * .2 * price)},
             "recovery": {**estimate, "interval_kind": "scenario",
                          "value": {k: number(v * price) for k, v in estimate.items()},
-                         "share_percent": number(100 * estimate["point"] / s.allocated),
-                         "target_coverage_percent": number(100 * estimate["point"] / (s.allocated * .2)),
+                         "share_percent": number(100 * estimate["point"] / s.allocated) if s.allocated else 0,
+                         "target_coverage_percent": number(100 * estimate["point"] / (s.allocated * .2)) if s.allocated else 0,
                          "target_gap_usd": number(max(0, (s.allocated * .2 - estimate["point"]) * price))},
-            "spend": spend, "weekly": weekly, "actions": actions,
+            "spend": spend, "weekly": weekly, "actions": eligible,
+            "screened_actions": actions,
+            "pcie_findings": sum(f["detectorId"] == "rules::gpu-pcie-saturated" and not f.get("metadata", {}).get("synthetic") for f in self.findings),
             "default_risk": self.scenario(price),
             "accounting": {
                 "naive_finding_hours": number(all_claimed),
@@ -210,7 +222,7 @@ class Analysis:
                 "filter": action["formula"],
                 "duration_cap": "min(gpu_hours, gpu_count × walltime_sec / 3600); discard ambiguous requeues.",
                 "deduplication": "CPU-placement jobs take precedence and are removed from idle-session policy.",
-                "scope": "The four-month observed sample. No extrapolation to unobserved idle fleet capacity.",
+                "scope": "The loaded observation window. No extrapolation to unobserved idle fleet capacity.",
             },
         }
 
@@ -227,31 +239,35 @@ class Analysis:
         }
 
     def causal_case(self):
-        arrays = [f for f in self.findings if f["detectorId"] == "rules::array-mass-failure"
-                  and f.get("rootCauses") and not f.get("metadata", {}).get("synthetic")]
-        if not arrays:
+        # Discover arrays from jobs, then link a matching supplied finding if present.
+        groups = self.jobs[self.jobs.is_array_task].groupby(["id_user", "id_array_job"])
+        candidates = []
+        for (uid, array_id), frame in groups:
+            failed = frame[frame.state_name.eq("FAILED")]
+            if len(frame) >= 10 and len(failed) / len(frame) > .9:
+                candidates.append((len(failed), int(uid), int(array_id), failed))
+        if not candidates:
             return None
-        tasks_by_root = defaultdict(list)
-        for f in self.findings:
-            if f["detectorId"] == "rules::array-task-failure":
-                for root in f.get("rootCauses", []):
-                    tasks_by_root[root].append(f)
-        chosen = max(arrays, key=lambda f: len(tasks_by_root[f["rootCauses"][0]]))
-        root = chosen["rootCauses"][0]
-        tasks = tasks_by_root[root]
-        ids = {int(f["metadata"]["job_id"]) for f in tasks if f.get("metadata", {}).get("job_id")}
-        raw = self.jobs[self.jobs.id_job.isin(ids)]
-        cards = self.gpus[self.gpus.id_job.isin(ids)]
+        _, uid, array_id, raw = max(candidates, key=lambda x: (x[0], -x[2], -x[1]))
+        chosen = next((f for f in self.findings if f["detectorId"] == "rules::array-mass-failure"
+                       and f.get("metadata", {}).get("array_job_id") == array_id
+                       and not f.get("metadata", {}).get("synthetic")
+                       and f.get("metadata", {}).get("owner", f"u-{uid}") == f"u-{uid}"), None)
+        root = (chosen.get("rootCauses") or [None])[0] if chosen else None
+        cards = self.gpus[self.gpus.id_job.isin(raw.id_job)]
         node_counts = cards.groupby("Node").id_job.nunique().sort_values(ascending=False)
+        codes = raw.exit_code.value_counts()
+        replicated = cards.Node.nunique() > 1 and len(codes) > 0 and codes.iloc[0] / len(raw) >= .9 and codes.index[0] != 0
         return {
-            "finding_id": chosen["id"], "root_id": root,
-            "root_name": self.s.name_of.get(root, root), "tasks": len(raw),
+            "finding_id": chosen["id"] if chosen else None,
+            "evidence_id": chosen["id"] if chosen else f"raw/array/{uid}/{array_id}", "root_id": root,
+            "root_name": self.s.name_of.get(root, f"array/{array_id}"), "tasks": len(raw),
             "nodes": int(cards.Node.nunique()), "gpu_hours": number(raw.gpu_hours.sum()),
             "node_counts": [{"node": k, "jobs": int(v)} for k, v in node_counts.head(8).items()],
-            "exit_codes": {str(k): int(v) for k, v in raw.exit_code.value_counts().items()},
-            "jobs": self.job_rows(raw, limit=8), "synthetic": False,
-            "decision": "Inspect the shared array and its workload before draining machines.",
-            "limitation": "Dispersion and a shared exit code support workload triage; they do not prove every machine healthy.",
+            "exit_codes": {str(k): int(v) for k, v in codes.items()},
+            "jobs": self.job_rows(raw, limit=8), "synthetic": False, "replicated": bool(replicated),
+            "decision": "Inspect the shared array and its workload before draining machines." if replicated else "Investigate the failed array; the cause remains unresolved.",
+            "limitation": "Shared failures are a workload investigation lead, not proof of a code defect or healthy hardware. Cross-machine, matching nonzero exit codes strengthen this lead." if replicated else "No replicated cross-machine exit-code control establishes cause. Gather comparable reruns before choosing a workload or hardware intervention.",
         }
 
     def scenario(self, price=DEFAULT_PRICE, recovery=1., false_positive=.02,
@@ -280,7 +296,7 @@ class Analysis:
         }
 
     def claims(self, price=DEFAULT_PRICE):
-        from .research import research
+        from .research import research_for
         overview = self.overview(price)
         rec = overview["recovery"]
         basis = " ".join(
@@ -289,7 +305,7 @@ class Analysis:
         )
         return {
             "team": os.environ.get("TEAM_NAME", "Reclaim"),
-            **research().claims(),
+            **research_for(self).claims(),
             "recoverable_gpu_hours": {
                 **{k: rec[k] for k in ("point", "low", "high")}, "interval_kind": "scenario",
                 "basis": basis + " CPU cohort owns overlaps. Excludes requeues. No causal recovery rate has been measured; actual recovery may be zero.",
@@ -309,6 +325,10 @@ class Analysis:
         }
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
+def _analysis_for(snapshot):
+    return Analysis(snapshot)
+
+
 def analysis():
-    return Analysis()
+    return _analysis_for(store())

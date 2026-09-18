@@ -1,5 +1,31 @@
 # Reclaim — Track 2 report
 
+## Post-event implementation note
+
+This report records the submitted analysis of the official sample. Its original
+three-case selection, short-episode comparison, and 29-test rehearsal below describe
+commit `244cf3d`; they are retained as historical findings, not universal facts about
+other datasets.
+
+The `codex/generalize-analysis` continuation recomputes candidate windows from raw
+records, evaluates every supplied hardware candidate, exposes all investigated
+windows and tolerates missing classes. A machine-specific signal now requires at
+least three researchers, each with at least two matching failures, a 50% local
+signature rate, five same-window comparison jobs elsewhere and no more than a 5%
+elsewhere signature rate. These thresholds are an explicit screening policy, not
+learned or calibrated probabilities. In the original short episode one researcher
+has only three comparison jobs; it fails this stricter screen. A broader raw window
+provides enough controls. The live interface reports the current result and window.
+
+Recommendations and trial exports require positive eligible time. Dataset metadata
+controls displayed provenance, the timestamp origin and default assumed GPU width.
+Reload validates an entire snapshot before switching it; MCP and AI explanations
+cannot reuse results from an earlier revision. See [DATASETS.md](docs/DATASETS.md).
+**43 tests pass** in the post-event implementation, including 14 tests on
+independent datasets. Independent small fixtures test empty data, zero/one/two trial groups, multiple
+machine candidates, absent findings, stale diagnoses, array discovery and reload
+isolation. The submitted branch is preserved separately.
+
 ## Decision
 
 Pilot CPU placement for successful jobs with no observed GPU compute, then trial warnings for long interactive allocations with very low GPU activity. Research platform owns the first pilot; scheduler operations owns the second. Do not authorize a fleet cut from these observations alone.

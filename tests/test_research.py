@@ -14,8 +14,14 @@ def r():
 
 def test_hardware_episode_uses_same_window_researcher_controls(r):
     h = r.hardware
-    assert (h["jobs"], h["failed"], h["signature_jobs"]) == (144, 140, 114)
-    assert (h["elsewhere_jobs"], h["elsewhere_signature"]) == (311, 0)
+    assert h["supported"] and h["supported_users"] >= 3
+    assert h["signature_jobs"] == 114
+    # The short supplied episode has only three elsewhere jobs for one user;
+    # it fails the new minimum of five. The raw fortnight has enough controls.
+    short = r.supplied_episodes[0]
+    assert not short["supported"] and short["supported_users"] == 2
+    assert h["hours"] == 14 * 24
+    assert h["elsewhere_jobs"] >= 311 and h["elsewhere_signature"] == 0
     assert len(h["controls"]) == 3
     assert all(c["elsewhere_jobs"] > 0 for c in h["controls"])
     assert 0 < h["signature_gpu_hours"] < .03
@@ -28,11 +34,14 @@ def test_hardware_episode_uses_same_window_researcher_controls(r):
 
 
 def test_window_cases_reconcile_and_do_not_carry_hardware_labels_forward(r):
-    hardware, workload, unknown = r.cases
-    assert all(c["detector_counts_match"] for c in r.cases)
+    hardware = next(c for c in r.cases if c["cause"] == "hardware")
+    workload = next(c for c in r.cases if c["cause"] == "user_code")
+    unknown = next(c for c in r.cases if c["node"] == hardware["node"] and c["cause"] == "cannot_determine")
+    assert len(r.cases) > 3
+    assert all(c["detector_counts_match"] for c in (hardware, workload, unknown))
     assert hardware["node"] == unknown["node"]
     assert (hardware["window"], unknown["window"]) == (0, 3)
-    assert [c["cause"] for c in r.cases] == ["hardware", "user_code", "cannot_determine"]
+    assert {c["cause"] for c in r.cases} == {"hardware", "user_code", "cannot_determine"}
     assert workload["array_control"]["matching_exit_elsewhere"] == 568
     assert workload["array_control"]["elsewhere_jobs"] == 568
     assert workload["controls"]["others_failed"] == 2
@@ -93,11 +102,11 @@ def test_node_investigation_uses_mcp_and_safe_keyless_brief(monkeypatch, tmp_pat
     inv._cache.clear()
     result = asyncio.run(inv.investigate("node-audit", 2.5))
     assert result["mode"] == "evidence-only"
-    assert [t["tool"] for t in result["tool_trace"]] == ["decision_evidence", "list_rules", "causal"]
-    assert "114" in result["text"] and "311" in result["text"]
+    assert [t["tool"] for t in result["tool_trace"]] == ["decision_evidence", "list_rules"]
+    assert "114" in result["text"] and str(research().hardware["elsewhere_jobs"]) in result["text"]
     obs = {"decision_evidence": inv.decision_evidence("node-audit")}
     answer = {"recommendation": "Inspect the machine.", "downside": "Draining removes capacity.",
-              "pilot": "Use controlled reruns.", "finding_id": obs["decision_evidence"]["finding_id"]}
+              "pilot": "Use controlled reruns.", "finding_id": obs["decision_evidence"]["evidence_id"]}
     assert "0.022 GPU-hours" in inv.final_brief(json.dumps(answer), obs)
     inv._cache.clear()
 
@@ -106,7 +115,7 @@ def test_node_financial_downside_cannot_invert_cost_and_net_benefit():
     e = inv.decision_evidence("node-audit")
     answer = {"recommendation": "Inspect the machine.",
               "downside": "The drain cost is negative and inspection provides no value.",
-              "pilot": "Compare controlled reruns.", "finding_id": e["finding_id"]}
+              "pilot": "Compare controlled reruns.", "finding_id": e["evidence_id"]}
     brief = inv.final_brief(json.dumps(answer), {"decision_evidence": e})
     assert "cost is negative" not in brief
     assert "provides no value" not in brief

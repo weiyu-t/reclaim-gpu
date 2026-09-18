@@ -9,6 +9,16 @@ from .planning import ActionId, TrialDraft, BILLING_PATHS, shortlist, draft_plan
 router = APIRouter(prefix="/api/reclaim", tags=["Reclaim — decision workspace"])
 
 
+@router.post("/dataset/reload")
+def reload_dataset():
+    from api.data_loader import reload_store
+    try:
+        snapshot = reload_store()
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        raise HTTPException(422, "Reload rejected; previous snapshot retained. " + str(exc))
+    return {"revision": snapshot.revision, "name": snapshot.metadata["name"], "jobs": len(snapshot.jobs)}
+
+
 @router.get("/overview")
 def overview(price: float = Query(2.5, gt=0, le=100)):
     return analysis().overview(price)
@@ -44,7 +54,7 @@ def causal_case():
     from api.main import causal
     from api.models import CausalRequest
     case = analysis().causal_case()
-    if case:
+    if case and case["finding_id"] and case["replicated"]:
         case["causal"] = causal(CausalRequest(finding_id=case["finding_id"])).model_dump()
     return case
 
@@ -82,8 +92,10 @@ def drain_scenario(price: float = Query(2.5, gt=0, le=100),
                    duration: float = Query(4, ge=0, le=168),
                    recurrence: float = Query(.5, ge=0, le=1),
                    operator_hours: float = Query(1, ge=0, le=24),
-                   nodes: int = Query(1, ge=1, le=5)):
-    return research().drain(price, duration, recurrence, operator_hours, nodes)
+                   nodes: int = Query(1, ge=1, le=10000),
+                   evidence_id: str | None = None,
+                   gpus_per_node: int | None = Query(None, ge=1, le=1024)):
+    return research().drain(price, duration, recurrence, operator_hours, nodes, evidence_id, gpus_per_node)
 
 
 @router.get("/card-imbalance")
@@ -113,16 +125,21 @@ def trial_plan(draft: TrialDraft):
 
 @router.post("/trial-brief")
 def trial_brief(draft: TrialDraft):
-    return Response(brief_html(draft), media_type="text/html",
+    try:
+        html = brief_html(draft)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return Response(html, media_type="text/html",
                     headers={"Content-Disposition": 'attachment; filename="reclaim-trial-brief.html"'})
 
 
 class InvestigationRequest(BaseModel):
     action_id: str = Field(pattern=r"^(cpu-placement|idle-sessions|causal-case|node-audit)$")
     price: float = Field(default=2.5, gt=0, le=100)
+    evidence_id: str | None = Field(default=None, max_length=512)
 
 
 @router.post("/investigate")
 async def investigate(req: InvestigationRequest):
     from .investigator import investigate as run
-    return await run(req.action_id, req.price)
+    return await run(req.action_id, req.price, req.evidence_id)

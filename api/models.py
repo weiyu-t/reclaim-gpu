@@ -136,8 +136,8 @@ class RuleTemplate(pydantic.BaseModel):
     summary: str
     short_help: str = ""
     can_auto_remediate: bool = False
-    # A rule that ran and found nothing is listed as CLEAR rather than omitted.
-    status: str = "ACTIVE"          # ACTIVE (findings present) | CLEAR (none)
+    # Missing findings do not establish that a detector was run.
+    status: str = "ACTIVE"          # ACTIVE (findings present) | UNKNOWN (none supplied)
     findings: int = 0
 
 

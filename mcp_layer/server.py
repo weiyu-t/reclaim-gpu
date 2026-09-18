@@ -5,8 +5,8 @@ descriptions carry more than the shape of each response — they carry the
 *epistemics* an agent needs to answer *"where should we cut GPU spend?"*:
 
 * Layer A (``findings``, ``causal``, ``neighbor``, ``rules``) mirrors the
-  production API. ``causal`` is trustworthy; it resolves a correlated
-  cluster of findings to the one resource underneath.
+  production API shape. ``causal`` resolves supplied annotations; it does not
+  validate them against a newly loaded telemetry snapshot.
 * Layer B (``efficiency_summary``, ``waste_breakdown``, ``queue_latency``,
   ``scaling_efficiency``, ``underperforming``, ``recommendations``) is a proposed
   business layer. Every response carries ``kind``:
@@ -19,7 +19,8 @@ so it validates judgments (e.g. against ``causal``) instead of acting on them
 blindly.
 
 Tools call the FastAPI route functions **in-process** — no HTTP hop, no second
-port, one shared in-memory ``store()``. Data loads once, on the first tool call.
+port, one shared snapshot loader. Reclaim investigations pin a single dataset
+revision throughout their tool calls.
 
 Run it::
 
@@ -44,16 +45,16 @@ mcp = FastMCP(
         "task: find where GPU spend is wasted.\n\n"
         "Two layers:\n"
         "- Layer A (findings, causal, neighbor, rules) mirrors the production "
-        "API. `causal` is authoritative — it resolves correlated findings to "
-        "one root cause.\n"
+        "API shape. `causal` resolves supplied annotations, which may be stale. "
+        "Use decision_evidence when available to validate against current raw records.\n"
         "- Layer B (efficiency_summary, waste_breakdown, queue_latency, "
         "scaling_efficiency, underperforming, recommendations) is a proposed "
         "business layer. Every response carries `kind`: `fact` (trust it), "
         "`judgment` (a model said so — check `confidence` and validate against "
         "`causal` before acting), or `simulated` (synthetic).\n\n"
         "Rule of thumb: do not act on a `judgment` (rankings, recommendations) "
-        "without checking it against the underlying `findings`/`causal` facts. "
-        "The data is a four-month job *sample*; do not extrapolate to whole-cluster "
+        "without checking it against current raw-record evidence. Absence of a finding "
+        "does not prove a clean evaluation. Workload samples do not establish whole-cluster "
         "utilization."
     ),
 )
@@ -117,7 +118,8 @@ def list_findings(
 def causal(finding_id: str, hop_count: int = 3) -> dict:
     """Root-cause analysis for one finding (Layer A, authoritative).
 
-    This is the endpoint to trust. Given a finding `id`, it resolves the
+    This resolves supplied finding annotations, not independently verified causes.
+    They may be stale after a dataset change. Given a finding `id`, it resolves the
     correlated cluster of findings that share a cause down to the single resource
     underneath (a machine, an array job, a person's workload, or a volume), with a
     computed `confidence` and the evidence chain.
@@ -128,7 +130,8 @@ def causal(finding_id: str, hop_count: int = 3) -> dict:
     `rules::node-hardware-fault`, and attributed `rules::node-job-failure-burst`
     carry a chain.
 
-    Use this to VALIDATE Layer B judgments: if `underperforming` or
+    Treat the chain as an investigation lead and compare raw-record controls.
+    Use it to question Layer B judgments: if `underperforming` or
     `recommendations` blames a node, check whether `causal` attributes the failures
     to the node or to something else (a person's job, a shared array)."""
     req = m.CausalRequest(finding_id=finding_id, hop_count=hop_count)
@@ -155,7 +158,7 @@ def detect(integration_id: str = "default") -> dict:
     A quick histogram: which detectors fired and how many findings each produced.
     Cheaper than paging `list_findings` when you only want the shape of the
     problem space. `list_rules` gives the same counts plus names, categories, and
-    which rules evaluated CLEAR."""
+    which rules have no supplied findings."""
     return _dump(api.detect(integration_id))
 
 
@@ -163,8 +166,8 @@ def detect(integration_id: str = "default") -> dict:
 def list_rules() -> dict:
     """The full rule catalogue with status and finding counts (Layer A, fact).
 
-    Every rule, including ones that found nothing (`status: CLEAR`) — knowing what
-    was checked and came back clean matters as much as what fired. Each rule has a
+    Every known rule, including those with no supplied findings (`status: UNKNOWN`).
+    Missing findings do not establish that a rule was run on this dataset. Each rule has a
     `category` (COST / PERFORMANCE / AVAILABILITY). Start here to map the terrain,
     then drill into `list_findings(detector_id=...)`."""
     return _dump(api.rules())
