@@ -17,16 +17,16 @@ type Shortlist = {
   reference_value_usd: number; owners_for_80_percent: number; owners: Owner[]; basis: string; limitation: string
   billing_paths: Record<Draft['billing_model'], Path>
 }
-type Plan = { status: string; success: string; stop: string; scope_note: string; missing: string[]
+type Plan = { eligible: boolean; status: string; success: string; stop: string; scope_note: string; missing: string[]
   cash: Path & { status: string; conditions_confirmed: boolean; missing: string[]; evidence_status: string } }
 const storageKey = 'reclaim-trial-draft-v1'
 const defaults: Draft = { action_id: 'cpu-placement', owners: 3, billing_model: 'owned', confirmations: [], contract_date: '', responsible_person: '', review_date: '', max_jobs: 5, duration_days: 7, spend_cap_usd: 500, max_slowdown_percent: 10 }
 const whole = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
-function loadDraft(): Draft {
+function loadDraft(key: string): Draft {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    const saved = JSON.parse(localStorage.getItem(key) || 'null')
     if (!saved || typeof saved !== 'object') return { ...defaults }
     const d = { ...defaults }
     if (['cpu-placement', 'idle-sessions'].includes(saved.action_id)) d.action_id = saved.action_id
@@ -56,8 +56,9 @@ function validation(d: Draft): string {
   return ''
 }
 
-export function TrialPlanner({ price }: { price: number }) {
-  const [draft, setDraft] = useState<Draft>(loadDraft)
+export function TrialPlanner({ price, datasetRevision }: { price: number; datasetRevision: string }) {
+  const key = storageKey + ':' + datasetRevision
+  const [draft, setDraft] = useState<Draft>(() => loadDraft(key))
   const [data, setData] = useState<Shortlist | null>(null)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [error, setError] = useState('')
@@ -72,8 +73,8 @@ export function TrialPlanner({ price }: { price: number }) {
   const payload = { ...draft, price, contract_date: draft.contract_date || null, review_date: draft.review_date || null }
   function update(values: Partial<Draft>) { setDownloaded(false); setDraft(d => ({ ...d, ...values })) }
   useEffect(() => {
-    try { localStorage.setItem(storageKey, JSON.stringify(draft)); setSaved(true) } catch { setSaved(false) }
-  }, [draft])
+    try { localStorage.setItem(key, JSON.stringify(draft)); setSaved(true) } catch { setSaved(false) }
+  }, [draft, key])
   useEffect(() => {
     const c = new AbortController()
     setData(null); setError('')
@@ -110,7 +111,7 @@ export function TrialPlanner({ price }: { price: number }) {
       <div className="section-top"><div><span className="eyebrow">01 / OWNERS TO CONSULT</span><h2>Where a few conversations could help</h2></div><Users size={23} /></div>
       <div className="planner-controls"><label className="planner-field"><span>Proposed change</span><select value={draft.action_id} onChange={e => update({ action_id: e.target.value as Draft['action_id'], confirmations: [] })}><option value="cpu-placement">Test CPU-only placement</option><option value="idle-sessions">Trial session warnings</option></select></label><fieldset className="owner-count"><legend>Owners with the most eligible GPU time</legend>{([1, 3, 5] as const).map(n => <button key={n} aria-pressed={draft.owners === n} className={'button ' + (draft.owners === n ? 'primary' : 'secondary')} onClick={() => { if (draft.owners !== n) update({ owners: n, confirmations: [] }) }}>Top {n}</button>)}</fieldset></div>
       {error ? <p className="inline-error">{error} <button onClick={() => setRevision(r => r + 1)}>Retry</button></p> : !data ? <p className="planner-loading"><LoaderCircle className="spin" size={17} />Ranking the source records…</p> : <>
-        <div className="shortlist-summary"><div><strong>{data.selected_share_percent.toFixed(1)}%</strong><span>of this action’s eligible GPU time</span></div><p><b>{data.selected_owners} of {data.total_owners} researcher accounts</b> cover {whole(data.selected_gpu_hours)} eligible GPU-hours across {whole(data.selected_jobs)} historical jobs. Start by asking these owners which repeat runs are suitable.</p><button className="text-button" onClick={() => document.getElementById('trial-brief')?.scrollIntoView({ behavior: 'smooth' })}>Use in trial brief<ArrowDown size={15} /></button></div>
+        <div className="shortlist-summary"><div><strong>{data.selected_share_percent.toFixed(1)}%</strong><span>of this action’s eligible GPU time</span></div><p><b>{data.selected_owners} of {data.total_owners} researcher accounts</b> cover {whole(data.selected_gpu_hours)} eligible GPU-hours across {whole(data.selected_jobs)} historical jobs. {data.selected_jobs ? 'Start by asking these owners which repeat runs are suitable.' : 'No eligible workloads were found for this action. Choose another action or load new data.'}</p><button className="text-button" onClick={() => document.getElementById('trial-brief')?.scrollIntoView({ behavior: 'smooth' })}>Use in trial brief<ArrowDown size={15} /></button></div>
         <div className="owner-rows">{data.owners.map((o, i) => <div className="owner-row" key={o.id}><span className="owner-rank">{i + 1}</span><div className="owner-identity"><strong>{o.label}</strong><small>{whole(o.jobs)} matching jobs</small></div><div className="owner-measure"><strong>{whole(o.eligible_gpu_hours)} GPU-h</strong><span>{o.share_percent.toFixed(1)}% of eligible time</span><div className="owner-bar"><i style={{ width: o.share_percent + '%' }} /></div></div><details className="owner-records"><summary>Source jobs</summary>{o.example_jobs.map(j => <button className="job-link" onClick={() => setRaw(j.id)} key={j.id}>{j.id}<ArrowUpRight size={12} /></button>)}</details></div>)}</div>
         <p className="planner-note">The percentage measures concentration in the historical sample. It does not predict trial savings or assess researcher performance. IDs are anonymized; a named owner still needs to agree.</p>
         <details className="json-details"><summary>How the shortlist is calculated</summary><p>{data.basis}</p><p>{data.limitation}</p><p>{data.owners_for_80_percent} owners account for at least 80% of this action’s eligible time. All {data.total_owners} owners together account for {whole(data.total_eligible_gpu_hours)} eligible GPU-hours.</p></details>
@@ -142,7 +143,7 @@ export function TrialPlanner({ price }: { price: number }) {
         </>}
       </div></div>
       {planError && <p className="inline-error">{planError} <button onClick={() => setRevision(r => r + 1)}>Retry</button></p>}
-      <div className="brief-export"><div><strong>Download a one-page decision brief</strong><p>Includes the shortlist, conditions, limits and space to record the decision. Open the HTML file in a browser to print or save as PDF.</p></div><button className="button primary" disabled={busy || pending || !!invalid || !data || !plan || !!planError} onClick={download}>{busy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}Download trial brief</button></div>
+      <div className="brief-export"><div><strong>Download a one-page decision brief</strong><p>Includes the shortlist, conditions, limits and space to record the decision. Open the HTML file in a browser to print or save as PDF.</p></div><button className="button primary" disabled={busy || pending || !!invalid || !data || !plan || !plan.eligible || !!planError} onClick={download}>{busy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}Download trial brief</button></div>
       {downloaded && <p className="download-confirmation" role="status"><Check size={15} />Brief download prepared. It remains a draft for review.</p>}
     </section>
     {raw && <RawJob id={raw} close={() => setRaw(null)} />}

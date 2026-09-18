@@ -6,6 +6,24 @@ Solo project by [@weiyu-t](https://github.com/weiyu-t) for the MantisGrid AI Hac
 
 On the official sample, two investigated pilots yield a base scenario of **16,206.57 GPU-hours / $40,516.43 of capacity value**, with an **8,879.80–24,377.49 GPU-hour** scenario range. That is 2.73% of observed allocation and 13.64% of a sample-equivalent 20% cut. Recovery has not been experimentally established; actual recovery could be zero. Freed capacity does not establish a reduced bill.
 
+## Post-event generalization
+
+This branch continues the project after the event. The submitted version remains on
+`codex/reclaim` at `244cf3d`. Calculations now support other datasets with the same
+input schema, including empty inputs and missing or contradictory findings.
+**43 automated tests pass**, including 14 independent-dataset tests. Browser checks
+cover empty data, a different cluster, dataset reloads and machine selection.
+Read [Loading another dataset](docs/DATASETS.md) for the schema, dataset metadata,
+external directory configuration, and the **Reload data** action.
+
+Recommendations are conditional on positive eligible time. Machine diagnoses require
+raw-record controls, all investigated windows are accessible, and raw arrays and node
+windows can be discovered without supplied findings. Reload validates a new snapshot
+before switching; calculation and MCP/AI caches are tied to that snapshot.
+
+The figures below and `REPORT.md` describe the official sample. `claims.json` is a
+saved export, not a runtime data source. Re-export after changing datasets.
+
 ## Run the submission
 
 Requires Docker with Compose v2.24 or newer. From this repository root:
@@ -45,7 +63,7 @@ Copy `.env.example` to `.env` and set `FEATHERLESS_API_KEY` locally. Keep the ke
 docker compose up -d --force-recreate api
 ```
 
-“Get briefing” retrieves evidence through the real MantisGrid MCP server, then sends a small set of public dataset excerpts and calculated summaries to Featherless. Live explanations are labeled, with model, tool trace, timing, and token usage. Unavailable models or missing keys fall back to a deterministic brief. Responses are cached for ten minutes. Explanations cannot change calculations or take operational action.
+“Get briefing” retrieves evidence through the real MantisGrid MCP server, then sends a small set of public dataset excerpts and calculated summaries to Featherless. Live explanations are labeled, with model, tool trace, timing, and token usage. Unavailable models or missing keys fall back to a deterministic brief. Responses are cached for ten minutes within the same dataset revision. With no eligible evidence, no model call is made. Explanations cannot change calculations or take operational action.
 
 Answers must match a four-field JSON structure and cite a retrieved finding ID. The model supplies recommendation and pilot prose; numerical evidence is rendered directly from calculation code. The hardware audit also renders financial downside from code to prevent confusion between a negative net benefit and a negative cost. Other briefings use model-written downside prose. Model prose containing digits is rejected. Prose still needs review against the records; these checks do not prove its correctness. Provider reasoning, request headers and keys never enter the run log. Each model attempt has a 45-second total deadline. Container usage logs live in `/app/out/agent_runs.jsonl`; native runs write `out/agent_runs.jsonl`. Logs are ignored by Git and are not persistent across container replacement.
 
@@ -55,7 +73,7 @@ Answers must match a four-field JSON structure and cite a retrieved finding ID. 
 - **Proposed trials:** two ranked actions, owner roles, evidence, pilots, and rollback conditions.
 - **Trial planner:** rank the top 1, 3 or 5 researcher accounts by eligible GPU-hours; review owned, committed or usage-based billing; export a printable trial brief with an owner, limits, review date and stop conditions.
 - **Downside costs:** vary recovery, useful work disrupted, operator effort, and how much freed capacity reduces a bill.
-- **Machine review:** compare hardware, workload and unresolved cases; audit the proposed drain recommendation and price a targeted versus five-machine drain.
+- **Machine review:** compare hardware, workload and unresolved cases; audit the proposed drain recommendation and price a drain with adjustable machine count and GPU width.
 - **GPU usage:** inspect paired compute/memory measurements and 2,475–4,685 quiet-card hours under explicit evidence thresholds; kept outside recovery totals.
 - **Evidence:** drill into jobs, per-GPU records and findings; inspect a shared-array failure across 34 machines.
 - **Method:** cohort definitions, overlap handling, sample limits and scenario assumptions.
@@ -75,7 +93,7 @@ make validate CLAIMS=claims.json URL=http://localhost:3000
 cd dashboard && npm run build
 ```
 
-The official validator accepts the claims schema. Its confidence warning checks only top-level fields ending in `_confidence`; it does not inspect nested estimate confidence. We intentionally provide no calibrated probability: recovery ranges are declared scenarios, and card ranges vary evidence thresholds. This warning is not a complete statement of how judges score calibration. See [REPORT.md](REPORT.md) for the basis and zero-recovery stress case. Claims cover the two recovery cohorts, three node windows, scheduler-recorded hardware failures, and card exposure. Synthetic-incident claims remain omitted.
+The official validator accepts the claims schema. Its confidence warning checks only top-level fields ending in `_confidence`; it does not inspect nested estimate confidence. We intentionally provide no calibrated probability: recovery ranges are declared scenarios, and card ranges vary evidence thresholds. This warning is not a complete statement of how judges score calibration. See [REPORT.md](REPORT.md) for the basis and zero-recovery stress case. Claims cover the two recovery cohorts, investigated node windows, scheduler-recorded hardware failures, and card exposure. Synthetic-incident claims remain omitted.
 
 ## Project map
 

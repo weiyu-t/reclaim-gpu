@@ -7,11 +7,11 @@ services:
       target: api
     ports: ["127.0.0.1:8000:8000"]
     volumes:
-      - ./data:/app/data:ro
+      - ${RECLAIM_DATA_DIR:-./data}:/app/data:ro
     env_file:
       - path: .env
         required: false
-    environment: [PYTHONUNBUFFERED=1]
+    environment: [PYTHONUNBUFFERED=1, RECLAIM_DATA_DIR=/app/data]
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]

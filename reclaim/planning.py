@@ -119,20 +119,25 @@ def draft_plan(draft: TrialDraft):
     stop = ("Stop on the first output mismatch, a runtime breach, or reaching the spending cap. Restore GPU placement and review CPU queue delays."
             if cpu else "Pause warnings if an owner reports interference with useful work or the spending cap is reached. Keep automatic expiry disabled.")
     missing = []
+    if not scope["selected_jobs"] or scope["selected_gpu_hours"] <= 0:
+        missing.append("No eligible workload supports this trial in the loaded dataset.")
     if not draft.responsible_person.strip():
         missing.append("Assign a responsible person.")
     if draft.review_date is None:
         missing.append("Set a review date.")
     return {
         "scope": scope, "cash": cash_path(draft), "success": success, "stop": stop,
-        "missing": missing, "status": "Draft for owner review" if not missing else "Draft — details still needed",
-        "decision": "Agree a bounded trial with the selected workload owners. No operational change is authorized or executed by this brief.",
+        "missing": missing, "eligible": scope["selected_gpu_hours"] > 0,
+        "status": "No supported trial" if scope["selected_gpu_hours"] <= 0 else "Draft for owner review" if not missing else "Draft — details still needed",
+        "decision": "No trial is supported by the current screening rules." if scope["selected_gpu_hours"] <= 0 else "Agree a bounded trial with the selected workload owners. No operational change is authorized or executed by this brief.",
         "scope_note": f"At most {draft.max_jobs} opt-in trial jobs in total across the selected owners, over {draft.duration_days} days. These are future trial limits, not a claim that the historical jobs will repeat.",
     }
 
 
 def brief_html(draft: TrialDraft):
     plan = draft_plan(draft)
+    if not plan["eligible"]:
+        raise ValueError("No eligible GPU time supports this trial; a trial brief cannot be exported.")
     scope, cash = plan["scope"], plan["cash"]
     e = lambda x: escape(str(x), quote=True)
     money = lambda x: f"${x:,.2f}"
@@ -152,4 +157,4 @@ def brief_html(draft: TrialDraft):
 <section><h2>2. Proposed trial and decision criteria</h2><p>{e(plan['scope_note'])}</p><p><b>Success:</b> {e(plan['success'])}</p><p><b>Stop / reverse:</b> {e(plan['stop'])}</p><p class="muted">The responsible person must monitor and enforce these proposed limits; this application does not control workloads or spending.</p></section>
 <section><h2>3. Path to a financial outcome</h2><p><b>{e(cash['label'])}:</b> {e(cash['outcome'])}</p><p>{e(cash['explanation'])}</p><ul>{checks}</ul>{f'<p>Next contract change: {e(contract)}</p>' if draft.billing_model == 'committed' else ''}<p><b>Next verification:</b> {e(cash['next_step'])}</p><p><b>Bill reduction: not established.</b> {e(cash['evidence_status'])}</p></section>
 <section><h2>4. Review and record the decision</h2><p>{e(plan['status'])}. {' '.join(e(x) for x in plan['missing'])}</p><p>Decision: ____________________ &nbsp; Reviewer: ____________________ &nbsp; Date: __________</p></section>
-<footer>Source: local MIT SuperCloud TX-GAIA historical sample. {e(scope['basis'])}<br>Researcher IDs are anonymized accounts, not named budget owners. Dates, spending caps and commercial confirmations are user inputs. This brief does not alter claims.json. Open this file in a browser and print to save a PDF.</footer></body></html>'''
+<footer>Source: {e(analysis().s.metadata['name'])}, snapshot {e(analysis().s.revision)}. {e(scope['basis'])}<br>Researcher IDs are accounts, not named budget owners. Dates, spending caps and commercial confirmations are user inputs. This brief does not alter claims.json. Open this file in a browser and print to save a PDF.</footer></body></html>'''

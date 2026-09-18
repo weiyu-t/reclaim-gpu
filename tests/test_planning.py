@@ -69,6 +69,7 @@ def test_brief_limits_and_missing_owner_remain_draft_and_html_is_escaped():
 
 def test_trial_api_validation_and_export_do_not_change_claims():
     with TestClient(app) as client:
+        before = client.get('/api/reclaim/claims').json()
         assert client.get('/api/reclaim/trial-shortlist?owners=6').status_code == 422
         assert client.get('/api/reclaim/trial-shortlist?action_id=all-users').status_code == 422
         assert client.post('/api/reclaim/trial-plan', json={"max_jobs": 0}).status_code == 422
@@ -79,4 +80,4 @@ def test_trial_api_validation_and_export_do_not_change_claims():
         assert brief.status_code == 200
         assert 'attachment' in brief.headers['content-disposition']
         assert 'Bill reduction: not established.' in brief.text
-        assert client.get('/api/reclaim/claims').json() == json.loads((Path(__file__).resolve().parent.parent / 'claims.json').read_text())
+        assert client.get('/api/reclaim/claims').json() == before

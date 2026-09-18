@@ -3,6 +3,7 @@ data/raw/
 data/prepped/
 data/synthetic/
 data/reports/
+data/dataset.json
 
 __pycache__/
 *.pyc

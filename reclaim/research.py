@@ -1,26 +1,22 @@
-"""Independent investigations: node/window controls and per-card accounting.
-
-Observations are recomputed from parquet, not copied from detector verdicts.
-These exposures are not added to the two policy recovery estimates.
-"""
+"""Raw-record investigations. Findings nominate candidates; they do not decide causes."""
 from functools import cached_property, lru_cache
+import math
 import numpy as np
 import pandas as pd
-from .analysis import analysis, EPOCH_OFFSET, number
+from scipy.stats import binomtest
+from .analysis import analysis, number
 
 
 class Research:
     def __init__(self, a):
-        self.a = a
-        self.jobs = a.jobs
-        self.gpus = a.gpus
+        self.a, self.jobs, self.gpus = a, a.jobs, a.gpus
         self.node_jobs = self.gpus.groupby("Node").id_job.agg(set).to_dict()
 
     def _stamp(self, text):
-        return pd.Timestamp(text).timestamp() - EPOCH_OFFSET
+        return pd.Timestamp(text).timestamp() - self.a.epoch_offset
 
     def _iso(self, offset):
-        return pd.to_datetime(offset + EPOCH_OFFSET, unit="s", utc=True).isoformat()
+        return pd.to_datetime(offset + self.a.epoch_offset, unit="s", utc=True).isoformat()
 
     def _node_hours(self, node, job_ids):
         c = self.gpus[self.gpus.Node.eq(node) & self.gpus.id_job.isin(job_ids)]
@@ -28,19 +24,15 @@ class Research:
         c = c[c.attempts.eq(1) & c.walltime_sec.gt(0)]
         return float(np.minimum(c.gpu_hours, c.walltime_sec / 3600).clip(lower=0).sum())
 
-    @cached_property
-    def hardware(self):
-        finding = next(f for f in self.a.findings if f["detectorId"] == "rules::node-hardware-fault")
-        m = finding["metadata"]
-        node, status = m["node"], int(m["exit_status"])
-        lo, hi = self._stamp(m["window_start"]), self._stamp(m["window_end"])
+    def _episode(self, node, lo, hi, status, finding=None):
         w = self.jobs[self.jobs.time_end.ge(lo) & self.jobs.time_end.lt(hi)]
-        on = w[w.id_job.isin(self.node_jobs[node]) & w.attempts.eq(1)]
+        local_ids = self.node_jobs.get(node, set())
+        on = w[w.id_job.isin(local_ids) & w.attempts.eq(1)]
         signature = on[on.state_name.eq("FAILED") & (on.exit_code // 256).eq(status)]
         controls = []
-        for uid in sorted(signature.id_user.unique()):
+        for uid in sorted(signature.id_user.dropna().unique()):
             here = on[on.id_user.eq(uid)]
-            elsewhere = w[w.id_user.eq(uid) & ~w.id_job.isin(self.node_jobs[node]) & w.attempts.eq(1)]
+            elsewhere = w[w.id_user.eq(uid) & ~w.id_job.isin(local_ids) & w.attempts.eq(1)]
             controls.append({
                 "user": f"u-{int(uid)}", "here_jobs": len(here),
                 "here_signature": int((here.state_name.eq("FAILED") & (here.exit_code // 256).eq(status)).sum()),
@@ -49,114 +41,190 @@ class Research:
                 "here_job_ids": [str(int(x)) for x in here.id_job],
                 "elsewhere_job_ids": [str(int(x)) for x in elsewhere.id_job],
             })
+        supported_users = [c for c in controls if c["here_signature"] >= 2
+                           and c["here_signature"] / c["here_jobs"] >= .5
+                           and c["elsewhere_jobs"] >= 5
+                           and c["elsewhere_signature"] / c["elsewhere_jobs"] <= .05]
+        supported = status > 0 and len(supported_users) >= 3
         return {
-            "node": node, "finding_id": finding["id"], "root_id": finding["rootCauses"][0],
-            "start": self._iso(lo), "end": self._iso(hi), "hours": number((hi - lo) / 3600),
+            "node": node, "finding_id": finding["id"] if finding else None,
+            "evidence_id": finding["id"] if finding else f"raw/node/{node}/{lo:g}/{status}",
+            "root_id": (finding.get("rootCauses") or [None])[0] if finding else None,
+            "supported": supported, "supported_users": len(supported_users),
+            "start": self._iso(lo), "end": self._iso(hi), "hours": number((hi-lo)/3600),
             "jobs": len(on), "failed": int(on.state_name.eq("FAILED").sum()),
             "exit_status": status, "signature_jobs": len(signature), "controls": controls,
-            "elsewhere_jobs": sum(x["elsewhere_jobs"] for x in controls),
-            "elsewhere_signature": sum(x["elsewhere_signature"] for x in controls),
+            "elsewhere_jobs": sum(c["elsewhere_jobs"] for c in controls),
+            "elsewhere_signature": sum(c["elsewhere_signature"] for c in controls),
             "signature_gpu_hours": number(self._node_hours(node, set(signature.id_job)), 6),
-            "all_failed_gpu_hours": number(self._node_hours(node, set(on.loc[on.state_name.eq("FAILED"), "id_job"]))),
             "job_ids": [str(int(x)) for x in signature.id_job],
-            "method": "Join gpus.id_job → jobs.id_job; distinct node/job placement; time_end within this episode; attempts = 1; exit_code // 256; compare the same researchers on other nodes in the same time window.",
-            "limitation": "Strong machine-specific evidence, not a physical diagnosis. Shared software/environment and correlated jobs remain possible confounders. Only matching-signature hours enter the drain scenario.",
+            "all_failed_gpu_hours": number(self._node_hours(node, set(on.loc[on.state_name.eq("FAILED"), "id_job"]))),
+            "method": "Join node/job placement to jobs; same-window, same-researcher controls; single attempts; packed exit_code // 256. Require at least three researchers, each with >=2 matching failures, >=50% local signature rate, >=5 elsewhere jobs and <=5% elsewhere signature rate. These are screening thresholds, not calibrated probabilities.",
+            "limitation": ("Machine-specific evidence supports inspection, not a physical diagnosis. Shared environment and correlated jobs remain possible confounders."
+                           if supported else "Raw records do not meet the machine-specific evidence thresholds. Do not authorize a hardware intervention from this finding."),
         }
+
+    @cached_property
+    def supplied_episodes(self):
+        episodes = []
+        self.invalid_hardware_findings = []
+        for f in self.a.findings:
+            if f["detectorId"] != "rules::node-hardware-fault" or f.get("metadata", {}).get("synthetic"):
+                continue
+            try:
+                m = f["metadata"]
+                lo, hi = self._stamp(m["window_start"]), self._stamp(m["window_end"])
+                if not math.isfinite(lo + hi) or hi <= lo:
+                    raise ValueError("Invalid episode dates")
+                episodes.append(self._episode(m["node"], lo, hi, int(m["exit_status"]), f))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                self.invalid_hardware_findings.append(f["id"])
+        return episodes
+
+    @cached_property
+    def window_candidates(self):
+        """Recompute the documented elevated-rate screen, including when findings are absent."""
+        if self.jobs.empty:
+            return []
+        span = 14 * 86400
+        placed = self.gpus[["Node", "id_job"]].drop_duplicates().merge(self.jobs, on="id_job", validate="many_to_one")
+        indices = ((self.jobs.time_end - self.a.s.t0) // span).astype(int)
+        placed["window"] = ((placed.time_end - self.a.s.t0) // span).astype(int)
+        supplied = {}
+        for f in self.a.findings:
+            if f["detectorId"] != "rules::node-elevated-failure-rate" or f.get("metadata", {}).get("synthetic"):
+                continue
+            try:
+                m = f["metadata"]
+                index = round((self._stamp(m["window_start"]) - self.a.s.t0) / span)
+                supplied[(m["node"], index)] = f
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+        out = []
+        for index, w in self.jobs.groupby(indices):
+            lo, hi = self.a.s.t0 + int(index)*span, self.a.s.t0 + (int(index)+1)*span
+            rate = float(w.state_name.eq("FAILED").mean())
+            for node, on in placed[placed.window.eq(index)].groupby("Node"):
+                failed = int(on.state_name.eq("FAILED").sum())
+                elevated = bool(len(w) >= 100 and len(on) >= 30 and binomtest(failed, len(on), rate, alternative="greater").pvalue < .01)
+                f = supplied.get((node, int(index)))
+                if elevated or f:
+                    out.append({"node": node, "index": int(index), "lo": lo, "hi": hi, "w": w, "on": on,
+                                "cluster_rate": rate, "finding": f, "elevated": elevated})
+        return out
+
+    @cached_property
+    def episodes(self):
+        episodes = list(self.supplied_episodes)
+        # A supplied finding may be missing or stale. Search raw windows as well.
+        for candidate in self.window_candidates:
+            node, lo, hi = candidate["node"], candidate["lo"], candidate["hi"]
+            on = candidate["on"]
+            failed = on[on.state_name.eq("FAILED") & on.attempts.eq(1)]
+            for status, count in (failed.exit_code // 256).value_counts().items():
+                if status <= 0 or count < 6:
+                    continue
+                if any(e["supported"] and e["node"] == node and e["exit_status"] == status
+                       and lo <= self._stamp(e["start"]) < hi for e in episodes):
+                    continue
+                e = self._episode(node, lo, min(hi, float(np.nextafter(self.a.s.t1, np.inf))), int(status))
+                if e["supported"]:
+                    episodes.append(e)
+        return sorted(episodes, key=lambda e: (not e["supported"], -e["signature_jobs"], e["node"], e["start"]))
+
+    @cached_property
+    def hardware(self):
+        return next((e for e in self.episodes if e["supported"]), None)
 
     @cached_property
     def windows(self):
         out = []
-        for f in self.a.findings:
-            if f["detectorId"] != "rules::node-elevated-failure-rate":
-                continue
-            m = f["metadata"]
-            # Displayed dates omit time-of-day. Recover the official consecutive
-            # windows from the sample origin, not midnight on the display date.
-            index = round((self._stamp(m["window_start"] + "T00:00:00Z") - self.a.s.t0) / (14 * 86400))
-            lo, hi = self.a.s.t0 + index * 14 * 86400, self.a.s.t0 + (index + 1) * 14 * 86400
-            w = self.jobs[self.jobs.time_end.ge(lo) & self.jobs.time_end.lt(hi)]
-            on = w[w.id_job.isin(self.node_jobs[m["node"]])]
+        for item in self.window_candidates:
+            node, index, lo, hi = item["node"], item["index"], item["lo"], item["hi"]
+            on, w, f = item["on"], item["w"], item["finding"]
             failed = on[on.state_name.eq("FAILED")]
-            uid = failed.id_user.value_counts().index[0]
-            mine, others = on[on.id_user.eq(uid)], on[~on.id_user.eq(uid)]
+            users = failed.id_user.dropna().value_counts()
+            uid = users.index[0] if len(users) else None
+            mine = on[on.id_user.eq(uid)] if uid is not None else on.iloc[:0]
+            others = on[~on.id_job.isin(mine.id_job)]
             my_failed = mine[mine.state_name.eq("FAILED")]
-            controls = {"dominant_user": f"u-{int(uid)}", "dominant_jobs": len(mine),
-                        "dominant_failed": len(my_failed), "failure_share": number(len(my_failed) / len(failed), 4),
+            controls = {"dominant_user": f"u-{int(uid)}" if uid is not None else None,
+                        "dominant_jobs": len(mine), "dominant_failed": len(my_failed),
+                        "failure_share": number(len(my_failed)/len(failed), 4) if len(failed) else 0,
                         "others_jobs": len(others), "others_failed": int(others.state_name.eq("FAILED").sum()),
                         "others_completed": int(others.is_success.sum())}
             arrays = my_failed.loc[my_failed.is_array_task, "id_array_job"].value_counts()
             array_control = None
             if len(arrays):
                 array_id = arrays.index[0]
-                peers = w[w.id_array_job.eq(array_id) & ~w.id_job.isin(self.node_jobs[m["node"]]) & w.attempts.eq(1)]
+                peers = w[w.id_array_job.eq(array_id) & w.id_user.eq(uid) & w.is_array_task
+                          & ~w.id_job.isin(self.node_jobs.get(node, set())) & w.attempts.eq(1)]
                 local = my_failed[my_failed.id_array_job.eq(array_id)]
                 code = int(local.exit_code.value_counts().index[0])
                 array_control = {"array": f"array/{int(array_id)}", "local_failed": len(local),
                                  "elsewhere_jobs": len(peers), "elsewhere_failed": int(peers.state_name.eq("FAILED").sum()),
                                  "matching_exit_elsewhere": int((peers.state_name.eq("FAILED") & peers.exit_code.eq(code)).sum()),
                                  "exit_code": code, "peer_job_ids": [str(int(x)) for x in peers.id_job]}
-            hw_here = (m["node"] == self.hardware["node"] and lo <= self._stamp(self.hardware["start"]) < hi)
-            user_support = bool(array_control and len(my_failed) / len(failed) >= .9
-                                and array_control["local_failed"] / len(failed) >= .8
+            h = next((e for e in self.episodes if e["supported"] and e["node"] == node
+                      and lo <= self._stamp(e["start"]) < hi), None)
+            user_support = bool(len(failed) and array_control and array_control["exit_code"] != 0
+                                and len(my_failed)/len(failed) >= .9 and array_control["local_failed"]/len(failed) >= .8
                                 and array_control["elsewhere_jobs"] >= 10
-                                and array_control["matching_exit_elsewhere"] / array_control["elsewhere_jobs"] >= .9
+                                and array_control["matching_exit_elsewhere"]/array_control["elsewhere_jobs"] >= .9
                                 and not on.attempts.gt(1).any())
-            cause = "hardware" if hw_here else "user_code" if user_support else "cannot_determine"
-            if cause == "hardware":
-                reason = (f"Joined gpus.Node/id_job to jobs.id_job/time_end/exit_code. In the enclosed episode, "
-                          f"{self.hardware['signature_jobs']} FAILED jobs from {len(self.hardware['controls'])} researchers share exit status "
-                          f"{self.hardware['exit_status']} here, versus {self.hardware['elsewhere_signature']}/{self.hardware['elsewhere_jobs']} "
-                          "same-window jobs elsewhere for those researchers. This supports targeted hardware inspection; it does not attribute every failure to hardware.")
-                decision, verdict = "Inspect this machine; decide the drain duration from the downside model.", "act"
-            elif cause == "user_code":
-                reason = (f"Joined gpus.Node/id_job to jobs.id_job/time_end/id_user/id_array_job/exit_code. "
-                          f"One researcher owns {len(my_failed)}/{len(failed)} failures. Their array contributes "
-                          f"{array_control['local_failed']} local failures; {array_control['matching_exit_elsewhere']}/{array_control['elsewhere_jobs']} "
-                          f"same-window sibling jobs elsewhere fail with the same packed exit code {array_control['exit_code']}. "
-                          f"Other researchers here have {controls['others_failed']}/{len(others)} FAILED jobs. "
+            cause = "hardware" if h else "user_code" if user_support else "cannot_determine"
+            if h:
+                reason = (f"Joined node/job records and same-window exit codes. {h['signature_jobs']} matching failures from "
+                          f"{len(h['controls'])} researchers here, versus {h['elsewhere_signature']}/{h['elsewhere_jobs']} jobs elsewhere. "
+                          "The raw controls meet the stated inspection thresholds; this does not identify a physical defect.")
+                decision, verdict = "Inspect this machine; agree a bounded intervention with its owners.", "act"
+            elif user_support:
+                reason = (f"Joined node/job/user/array/exit-code records. One researcher owns {len(my_failed)}/{len(failed)} failures; "
+                          f"their array contributes {array_control['local_failed']} local failures and "
+                          f"{array_control['matching_exit_elsewhere']}/{array_control['elsewhere_jobs']} same-window sibling failures elsewhere "
+                          f"with packed exit code {array_control['exit_code']}. Other researchers have {controls['others_failed']}/{len(others)} failures. "
                           "Investigate the shared workload/environment; this does not identify the exact code defect.")
                 decision, verdict = "Investigate the shared array with its owner before draining this node.", "no_action"
             else:
-                reason = (f"Joined gpus.Node/id_job to jobs.id_job/time_end/id_user/id_array_job. "
-                          f"The window has {len(failed)}/{len(on)} FAILED jobs. The dominant researcher owns "
-                          f"{len(my_failed)}/{len(failed)} failures; other researchers have {controls['others_failed']}/{len(others)} failures. "
-                          "No matching hardware episode or sufficiently replicated same-array/exit-code control establishes cause. "
-                          "Failure concentration alone cannot distinguish workload mix, user code and hardware. Collect controlled reruns and node diagnostics.")
-                decision, verdict = "Monitor and collect controlled reruns; do not authorize a drain from this flag.", "monitor"
-            out.append({"id": f["id"], "node": m["node"], "window": index,
-                        "start": self._iso(lo), "end": self._iso(min(hi, self.jobs.time_end.max())),
+                reason = (f"Joined node/job/user/array records. {len(failed)}/{len(on)} jobs FAILED; the dominant researcher accounts for "
+                          f"{len(my_failed)} failures. No sufficiently replicated machine-signature or same-array control establishes cause. "
+                          "Collect controlled reruns and diagnostics; a supplied finding alone is not a diagnosis.")
+                decision, verdict = "Collect more evidence before changing machine capacity.", "monitor"
+            counts_match = bool(f and len(on) == f["metadata"].get("jobs") and len(failed) == f["metadata"].get("failed"))
+            out.append({"id": f["id"] if f else f"raw/window/{node}/{index}", "node": node, "window": index,
+                        "finding_id": f["id"] if f else None, "start": self._iso(lo), "end": self._iso(min(hi, self.a.s.t1)),
                         "jobs": len(on), "failed": len(failed), "rate": number(len(failed)/len(on), 4),
-                        "cluster_rate": m["cluster_rate_this_window"], "cause": cause, "reasoning": reason,
-                        "explanation": reason.split(". ", 1)[1],
+                        "cluster_rate": item["cluster_rate"], "cause": cause, "reasoning": reason, "explanation": reason,
                         "decision": decision, "verdict": verdict, "controls": controls, "array_control": array_control,
-                        "requeued_jobs": int(on.attempts.gt(1).sum()),
-                        "detector_counts_match": len(on) == m["jobs"] and len(failed) == m["failed"],
-                        "job_ids": [str(int(x)) for x in on.id_job],
-                        "examples": self.a.job_rows(on, limit=8)["rows"]})
+                        "hardware": h, "requeued_jobs": int(on.attempts.gt(1).sum()), "detector_counts_match": counts_match,
+                        "currently_elevated": item["elevated"],
+                        "job_ids": [str(int(x)) for x in on.id_job], "examples": self.a.job_rows(on, limit=8)["rows"]})
         return out
 
     @cached_property
     def cases(self):
-        hardware = next(x for x in self.windows if x["cause"] == "hardware" and x["detector_counts_match"])
-        user = max((x for x in self.windows if x["cause"] == "user_code" and x["detector_counts_match"]),
-                   key=lambda x: x["array_control"]["matching_exit_elsewhere"])
-        ambiguous = next((x for x in self.windows if x["node"] == hardware["node"] and x["cause"] == "cannot_determine" and x["detector_counts_match"]),
-                         next(x for x in self.windows if x["cause"] == "cannot_determine" and x["detector_counts_match"]))
-        return [hardware, user, ambiguous]
+        # Preserve contrasting examples when available; never assume a class exists.
+        hardware = sorted((x for x in self.windows if x["cause"] == "hardware"), key=lambda x: (-x["failed"], x["id"]))
+        users = sorted((x for x in self.windows if x["cause"] == "user_code"), key=lambda x: (-x["array_control"]["matching_exit_elsewhere"], x["id"]))
+        unknown = sorted((x for x in self.windows if x["cause"] == "cannot_determine"),
+                         key=lambda x: (not any(h["node"] == x["node"] for h in hardware), x["window"], x["id"]))
+        # Every recomputed window is accessible; no fixed three-case selection.
+        return hardware + users + unknown
 
     def node_audit(self, price=2.5):
-        from api.main import underperforming, recommendations, causal
-        from api.models import CausalRequest
+        from api.main import underperforming, recommendations
         ranked = underperforming(entity_type="node", limit=5, usd_per_gpu_hour=price).model_dump()
-        rec = next(x for x in recommendations(usd_per_gpu_hour=price).model_dump()["recommendations"] if x["id"] == "rec_drain_nodes")
-        return {"hardware": self.hardware, "cases": self.cases,
+        rec = next((x for x in recommendations(usd_per_gpu_hour=price).model_dump()["recommendations"] if x["id"] == "rec_drain_nodes"), None)
+        h = self.hardware
+        included = h["node"] in {x["entity_id"] for x in ranked["rows"]} if h else None
+        return {"hardware": h, "episodes": self.episodes, "cases": self.cases,
+                "gpus_per_node": self.a.s.metadata["gpus_per_node"],
                 "case_count": len(self.cases), "flagged_windows": len(self.windows),
-                "baseline": {"nodes": ranked["rows"], "recommendation": rec,
-                             "includes_hardware_node": self.hardware["node"] in {x["entity_id"] for x in ranked["rows"]},
-                             "audit": "The proposed endpoint ranks finding counts and sums mixed, overlapping impacts. It does not check root causes. Its savings estimate and fixed confidence are not validated treatment effects. Absence of a hardware finding does not establish that its five selected nodes are healthy."},
-                "causal": causal(CausalRequest(finding_id=self.hardware["finding_id"])).model_dump(),
-                "history": self.hardware_history(),
-                "method": "Three selected, reproducible case studies. Node/window totals use time_end and unique GPU node/job placement. Window indices start at the sample's exact t0 and span 14 days. These are not predictions or a validation set for all nodes."}
+                "rejected_hardware_findings": [e["finding_id"] for e in self.supplied_episodes if not e["supported"]] + self.invalid_hardware_findings,
+                "baseline": {"nodes": ranked["rows"], "recommendation": rec, "includes_hardware_node": included,
+                             "audit": "The proposed endpoint ranks finding counts and sums overlapping impacts. It does not validate raw-record controls. Its savings and confidence are not measured intervention outcomes."},
+                "causal": None, "history": self.hardware_history(),
+                "method": "Recompute 14-day node windows from the loaded sample origin. Evaluate supplied candidates and raw elevated-rate candidates. Diagnose only from raw controls; missing or contradictory evidence remains unresolved."}
 
     def hardware_history(self):
         j = self.jobs
@@ -164,22 +232,24 @@ class Research:
         return {"jobs": len(recorded), "attempts": int(recorded.nodefail_attempts.sum()),
                 "terminal_node_fail": int(j.state_name.eq("NODE_FAIL").sum()),
                 "recovered_or_other_outcome": int((~recorded.state_name.eq("NODE_FAIL")).sum()),
-                "basis": "Distinct GPU jobs with hit_node_failure, reconciled to nodefail_attempts from the scheduler requeue history. This is a scheduler-recorded count, not an estimate of all hardware failures. Failed-attempt nodefail_nodes are used for placement; a retry's final node is not blamed."}
+                "basis": "Distinct GPU jobs with hit_node_failure, reconciled to nodefail_attempts from scheduler retry history. This counts recorded failures, not all possible hardware faults."}
 
-    def drain(self, price=2.5, duration=4., recurrence=.5, operator_hours=1., nodes=1):
-        h = self.hardware
+    def drain(self, price=2.5, duration=4., recurrence=.5, operator_hours=1., nodes=1, evidence_id=None, gpus_per_node=None):
+        h = next((e for e in self.episodes if e["supported"] and e["evidence_id"] == evidence_id), None) if evidence_id else self.hardware
+        if not h:
+            return {"available": False, "reason": "No machine-specific episode meets the evidence thresholds. A drain benefit cannot be estimated from the available records."}
+        width = gpus_per_node if gpus_per_node is not None else self.a.s.metadata["gpus_per_node"]
         exposed = h["signature_gpu_hours"]
-        avoided = exposed * recurrence
-        unavailable = nodes * 2 * duration
-        labor = operator_hours * 95
-        return {"inputs": {"duration": duration, "recurrence": recurrence, "operator_hours": operator_hours, "nodes": nodes, "price": price},
+        avoided, unavailable, labor = exposed * recurrence, nodes * width * duration, operator_hours * 95
+        return {"available": True, "evidence_id": h["evidence_id"], "node": h["node"], "start": h["start"], "end": h["end"],
+                "inputs": {"duration": duration, "recurrence": recurrence, "operator_hours": operator_hours, "nodes": nodes, "price": price, "gpus_per_node": width},
                 "reference_episode_hours": h["hours"], "observed_signature_gpu_hours": exposed,
                 "avoided_gpu_hours": number(avoided), "unavailable_gpu_hours": number(unavailable),
                 "avoided_value_usd": number(avoided * price), "capacity_cost_usd": number(unavailable * price),
                 "operator_cost_usd": number(labor), "net_value_usd": number((avoided-unavailable)*price-labor),
-                "break_even_drain_hours": number(max(0, (avoided * price - labor)/(nodes*2*price)), 4),
+                "break_even_drain_hours": number(max(0, (avoided * price - labor)/(nodes*width*price)), 4),
                 "cannot_break_even_even_at_zero_drain": avoided*price < labor,
-                "caveat": "Assume one recurrence of the observed episode and the selected fraction of signature losses preventable. This is not a forecast or hardware-fault probability. Drain cost values every unavailable slot at the reference rate, even if unoccupied; it is capacity cost, not proved cash or displaced work. Jobs need checkpointing; repair success, queue effects, lost research value and transition timing are unmeasured."}
+                "caveat": "Assume one recurrence and the selected fraction preventable. GPUs per machine, downtime and labor are scenario inputs; confirm actual machine inventory. Unavailable capacity is not proved cash or displaced work. Research value, queues and future recurrence are unmeasured."}
 
     @cached_property
     def card_data(self):
@@ -233,13 +303,17 @@ class Research:
         history = self.hardware_history()
         return {"node_triage": [{k: c[k] for k in ("node", "window", "cause", "reasoning", "verdict")} for c in self.cases],
                 "hardware_attributable_failures": history["jobs"],
-                "hardware_attributable_rationale": history["basis"] + f" {history['jobs']} jobs experienced {history['attempts']} recorded failed attempts; only {history['terminal_node_fail']} end in NODE_FAIL. The separate SIGBUS episode is investigated but not added to this scheduler-only count.",
+                "hardware_attributable_rationale": history["basis"] + f" {history['jobs']} jobs experienced {history['attempts']} recorded failed attempts; only {history['terminal_node_fail']} end in NODE_FAIL. Machine-specific signature investigations are not added to this scheduler-only count.",
                 "card_imbalance_gpu_hours": {"point": levels[1]["gpu_hours"], "low": levels[0]["gpu_hours"], "high": levels[2]["gpu_hours"],
                                              "interval_kind": "scenario", "basis": cards["method"] + " Bounds represent measured exposure under different evidence thresholds, not recovered time. Excluded from recoverable_gpu_hours."},
                 "card_imbalance_rationale": cards["limitation"] + " " + cards["pilot"],
                 "card_imbalance_index_reasoning": f"Selected quiet-card rows by local gpu_id: {cards['quiet_card_index']}. " + cards["index_caveat"]}
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
+def research_for(a):
+    return Research(a)
+
+
 def research():
-    return Research(analysis())
+    return research_for(analysis())

@@ -71,7 +71,7 @@ DEFAULT_PRICE_BOOK = m.PriceBook(epoch_offset=1750862959)
 
 def _window() -> m.Window:
     s = store()
-    f = lambda t: dt.datetime.fromtimestamp(t + DEFAULT_PRICE_BOOK.epoch_offset,
+    f = lambda t: dt.datetime.fromtimestamp(t + s.epoch_offset,
                                             dt.timezone.utc).strftime("%Y-%m-%d")
     return m.Window(start=f(s.t0), end=f(s.t1))
 
@@ -156,8 +156,8 @@ def neighbor(req: m.NeighborRequest):
 @app.post("/v1/causal", response_model=m.CausalResponse,
           tags=["Layer A — the real API"])
 def causal(req: m.CausalRequest):
-    """Root-cause analysis. This endpoint is correct -- it resolves a correlated
-    cluster of findings to the single resource underneath."""
+    """Resolve the supplied causal annotations. These may be stale; Reclaim
+    independently checks raw-record controls before recommending action."""
     s = store()
     f = next((x for x in s.findings if x["id"] == req.finding_id), None)
     if f is None:
@@ -411,9 +411,9 @@ def rules():
     for k, (name, cat) in NAMES.items():
         n = counts.get(k, 0)
         out.append(m.RuleTemplate(
-            rule_id=k, name=name, category=cat, status="ACTIVE" if n else "CLEAR",
+            rule_id=k, name=name, category=cat, status="ACTIVE" if n else "UNKNOWN",
             findings=n,
-            summary=(f"{n} active findings" if n else "Evaluated clean — no findings"),
+            summary=(f"{n} supplied findings" if n else "No supplied findings; evaluation coverage is unknown"),
             short_help="Deterministic rule; recomputable from raw data."))
     return m.RuleTemplatesResponse(rules=out)
 
@@ -427,7 +427,7 @@ def get_price_book():
     `usd_per_engineer_hour` query parameters to the endpoints that use pricing
     (efficiency/summary, queue/latency, resources/underperforming, recommendations).
     """
-    return DEFAULT_PRICE_BOOK
+    return DEFAULT_PRICE_BOOK.model_copy(update={"epoch_offset": store().epoch_offset})
 
 
 @app.get("/v1/efficiency/summary", response_model=m.Envelope, tags=["Layer B — proposed"])
@@ -437,11 +437,11 @@ def efficiency_summary(
 ):
     s = store()
     version = _price_version(usd_per_gpu_hour, DEFAULT_PRICE_BOOK.usd_per_engineer_hour)
-    rows = [{"label": "allocated", "gpu_hours": round(s.allocated, 1), "share": 1.0},
+    rows = [{"label": "allocated", "gpu_hours": round(s.allocated, 1), "share": 1.0 if s.allocated else 0.0},
             {"label": "computed", "gpu_hours": round(s.computed, 1),
-             "share": round(s.computed / s.allocated, 4)},
+             "share": round(s.computed / s.allocated, 4) if s.allocated else 0.0},
             {"label": "computed_completed", "gpu_hours": round(s.computed_completed, 1),
-             "share": round(s.computed_completed / s.allocated, 4)}]
+             "share": round(s.computed_completed / s.allocated, 4) if s.allocated else 0.0}]
     return m.Envelope(
         metric="capacity_waterfall", window=_window(), unit="gpu_hours",
         value=round(s.allocated, 1), rows=rows,
